@@ -163,6 +163,8 @@ export class Director {
     const has = (f: string) => this.s.flags.includes(f);
     v.day = day;
     this.station.overview.clockOffset = 3 * 3600 + 13 * 60;
+    this.station.cctv.clockOffset = this.station.overview.clockOffset;
+    this.station.cctv.day = day;
     v.rooms[3] = has('lab_dark') && day === 2 ? { status: 'NO POWER', level: 'warn', crew: 2 } : { status: 'NORMAL', level: 'normal', crew: 2 };
     v.pump2 = has('pump2_rebuilt') ? 'ON' : 'FAILED';
     v.pump1 = 'ON';

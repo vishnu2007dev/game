@@ -99,3 +99,7 @@ body {
 #app canvas.can-focus {
   cursor: pointer;
 }
+
+[hidden] {
+  display: none !important;
+}

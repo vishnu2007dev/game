@@ -24,6 +24,7 @@ declare global {
 /** What the game can do to the room. */
 export interface Station {
   overview: OverviewScreen;
+  cctv: CctvScreen;
   trends: TrendScreen;
   switches: PanelSwitch[];
   /** Called when the player opens a guard or throws a switch. */
@@ -235,6 +236,7 @@ export function startScene(root: HTMLElement): Station {
 
   station = {
     overview,
+    cctv,
     trends,
     switches: desk.switches,
     onSwitch: () => {},

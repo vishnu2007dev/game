@@ -32,6 +32,8 @@ export class CctvScreen {
   readonly h = 800;
   private grain: HTMLCanvasElement[] = [];
   private scenes: HTMLCanvasElement[];
+  day = 1;
+  clockOffset = 0;
 
   constructor() {
     this.canvas.width = this.w;
@@ -166,7 +168,7 @@ export class CctvScreen {
     const label = `${f.cam}  ${f.room}`;
     ctx.strokeText(label, x + 18, y + 42);
     ctx.fillText(label, x + 18, y + 42);
-    const ts = `DAY 1  ${clock(t)}`;
+    const ts = `DAY ${this.day}  ${clock(t + this.clockOffset)}`;
     ctx.strokeText(ts, x + 16, y + h - 18);
     ctx.fillText(ts, x + 16, y + h - 18);
     ctx.restore();

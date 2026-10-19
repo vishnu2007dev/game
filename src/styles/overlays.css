@@ -814,3 +814,7 @@
     transition: none !important;
   }
 }
+
+.ov-end-theories .ov-btn {
+  justify-self: start;
+}
