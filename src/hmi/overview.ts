@@ -1,34 +1,19 @@
 import * as THREE from 'three';
 import { HMI, HMI_FONT, clock } from './palette';
+import { initialView, type Level, type StationView } from './view';
 
-type Level = 'normal' | 'warn' | 'alarm';
-
-interface Compartment {
-  id: string;
-  name: string;
-  x: number;
-  w: number;
-  status: string;
-  level: Level;
-  crew: number;
-}
-
-const COMPARTMENTS: Compartment[] = [
-  { id: 'C1', name: 'COMMAND', x: 0, w: 0.17, status: 'NORMAL', level: 'normal', crew: 1 },
-  { id: 'C2', name: 'BALLAST', x: 0.17, w: 0.16, status: 'FLOODING', level: 'alarm', crew: 0 },
-  { id: 'C3', name: 'POWER', x: 0.33, w: 0.17, status: 'POWER 61%', level: 'warn', crew: 1 },
-  { id: 'C4', name: 'LAB', x: 0.5, w: 0.165, status: 'NORMAL', level: 'normal', crew: 2 },
-  { id: 'C5', name: 'QUARTERS', x: 0.665, w: 0.17, status: 'NORMAL', level: 'normal', crew: 1 },
-  { id: 'C6', name: 'DIVE BAY', x: 0.835, w: 0.165, status: 'NORMAL', level: 'normal', crew: 1 },
+const COMPARTMENTS = [
+  { id: 'C1', name: 'COMMAND', x: 0, w: 0.17 },
+  { id: 'C2', name: 'BALLAST', x: 0.17, w: 0.16 },
+  { id: 'C3', name: 'POWER', x: 0.33, w: 0.17 },
+  { id: 'C4', name: 'LAB', x: 0.5, w: 0.165 },
+  { id: 'C5', name: 'QUARTERS', x: 0.665, w: 0.17 },
+  { id: 'C6', name: 'DIVE BAY', x: 0.835, w: 0.165 },
 ];
 
-const ALARMS = [
-  { time: '03:47', level: 'HIGH', text: 'C2 BALLAST ROOM IS FLOODING', state: 'NEW', color: HMI.alarm },
-  { time: '03:46', level: 'MED', text: 'DOOR BETWEEN C1 AND C2 IS OPEN', state: 'NEW', color: HMI.warn },
-  { time: '03:46', level: 'MED', text: 'HULL STRESS ABOVE NORMAL', state: 'SEEN', color: HMI.warn },
-];
+const levelColour = { HIGH: HMI.alarm, MED: HMI.warn, LOW: HMI.text };
 
-const colourOf = (l: Level) => (l === 'alarm' ? HMI.alarm : l === 'warn' ? HMI.warn : HMI.text);
+const colourOf = (l: Level): string => (l === 'alarm' ? HMI.alarm : l === 'warn' ? HMI.warn : HMI.text);
 
 /**
  * Station overview: a cutaway of the six rooms, the ballast pipe and the
@@ -41,6 +26,9 @@ export class OverviewScreen {
   private ctx: CanvasRenderingContext2D;
   readonly w = 1600;
   readonly h = 1000;
+  view: StationView = initialView();
+  /** Seconds added to the station clock, so each morning starts later. */
+  clockOffset = 0;
 
   constructor() {
     this.canvas.width = this.w;
@@ -70,18 +58,30 @@ export class OverviewScreen {
     ctx.textAlign = 'right';
     ctx.font = `500 34px ${HMI_FONT.mono}`;
     ctx.fillStyle = HMI.text;
-    ctx.fillText(`DAY 1   ${clock(t)}`, w - 32, 41);
+    ctx.fillText(`DAY ${this.view.day}   ${clock(t + this.clockOffset)}`, w - 32, 41);
     ctx.textAlign = 'left';
 
-    // The alarm banner flashes until the operator acknowledges it.
-    ctx.fillStyle = flash ? HMI.alarm : '#5a1714';
-    ctx.fillRect(0, 80, w, 100);
-    ctx.fillStyle = flash ? '#ffffff' : '#f0c4c0';
-    ctx.font = `700 60px ${HMI_FONT.label}`;
-    ctx.fillText('FLOOD ALARM: C2 BALLAST ROOM', 32, 132);
-    ctx.textAlign = 'right';
-    ctx.font = `600 34px ${HMI_FONT.mono}`;
-    ctx.fillText('NEW', w - 32, 132);
+    // The alarm banner flashes until the operator deals with it. With no
+    // alarm the strip stays gray, which is the point of a calm screen.
+    const banner = this.view.banner;
+    if (banner) {
+      const on = banner.level === 'alarm' ? HMI.alarm : HMI.warn;
+      const off = banner.level === 'alarm' ? '#5a1714' : '#5a4310';
+      ctx.fillStyle = flash ? on : off;
+      ctx.fillRect(0, 80, w, 100);
+      ctx.fillStyle = flash ? (banner.level === 'alarm' ? '#ffffff' : '#1a1a1a') : '#f0dcd0';
+      ctx.font = `700 60px ${HMI_FONT.label}`;
+      ctx.fillText(banner.text, 32, 132);
+      ctx.textAlign = 'right';
+      ctx.font = `600 34px ${HMI_FONT.mono}`;
+      ctx.fillText('ACTIVE', w - 32, 132);
+    } else {
+      ctx.fillStyle = HMI.panel;
+      ctx.fillRect(0, 80, w, 100);
+      ctx.fillStyle = HMI.textDim;
+      ctx.font = `600 44px ${HMI_FONT.label}`;
+      ctx.fillText('NO ACTIVE ALARMS', 32, 132);
+    }
     ctx.textAlign = 'left';
 
     this.drawMap(t, flash);
@@ -98,10 +98,11 @@ export class OverviewScreen {
     const r = 80;
 
     // Flood water inside C2, clipped to the hull.
+    const v = this.view;
     const c2 = COMPARTMENTS[1];
     const cx = left + c2.x * hullW;
     const cw = c2.w * hullW;
-    const level = 0.42 + Math.sin(t * 0.7) * 0.004;
+    const level = Math.max(0.005, v.water + Math.sin(t * 0.7) * 0.004);
     const waterTop = bottom - (bottom - top) * level;
     const wave = (x: number) => waterTop + Math.sin(x * 0.05 + t * 3) * 3;
     ctx.save();
@@ -138,7 +139,7 @@ export class OverviewScreen {
         ctx.moveTo(x, bottom - 16);
         ctx.lineTo(x, bottom);
         ctx.stroke();
-        if (i === 1) {
+        if (i === 1 && v.doorOpen) {
           // The open door: an outlined gap, flashing amber.
           ctx.strokeStyle = flash ? HMI.warn : HMI.lineDim;
           ctx.lineWidth = 4;
@@ -148,32 +149,33 @@ export class OverviewScreen {
           ctx.fillRect(x - 6, bottom - 78, 12, 62);
         }
       }
+      const room = v.rooms[i];
       const tx = x + (i === 0 ? 52 : 18);
-      ctx.fillStyle = c.level === 'normal' ? HMI.text : HMI.white;
+      ctx.fillStyle = room.level === 'normal' ? HMI.text : HMI.white;
       ctx.font = `600 40px ${HMI_FONT.label}`;
       ctx.fillText(`${c.id} ${c.name}`, tx, top + 48);
       ctx.font = `600 32px ${HMI_FONT.mono}`;
-      ctx.fillStyle = colourOf(c.level);
-      ctx.fillText(c.status, tx, top + 104);
+      ctx.fillStyle = colourOf(room.level);
+      ctx.fillText(room.status, tx, top + 104);
       ctx.font = `500 28px ${HMI_FONT.mono}`;
       ctx.fillStyle = HMI.textDim;
-      ctx.fillText(c.crew === 1 ? '1 PERSON' : `${c.crew} PEOPLE`, tx, top + 148);
+      ctx.fillText(room.crew === 1 ? '1 PERSON' : `${room.crew} PEOPLE`, tx, top + 148);
     });
 
     // Label for the open door, below the hull so it never hits the water.
     const doorX = left + COMPARTMENTS[1].x * hullW;
-    ctx.fillStyle = HMI.warn;
+    ctx.fillStyle = v.doorOpen ? HMI.warn : HMI.textDim;
     ctx.font = `600 28px ${HMI_FONT.mono}`;
-    ctx.fillText('DOOR OPEN', doorX - 70, bottom + 38);
+    ctx.fillText(v.doorOpen ? 'DOOR OPEN' : 'DOOR SHUT', doorX - 70, bottom + 38);
 
-    if (flash) {
+    if (flash && v.rooms[1].level === 'alarm') {
       ctx.strokeStyle = HMI.alarm;
       ctx.lineWidth = 7;
       ctx.strokeRect(cx + 6, top + 6, cw - 12, bottom - top - 12);
     }
     ctx.fillStyle = HMI.white;
     ctx.font = `600 30px ${HMI_FONT.mono}`;
-    ctx.fillText('WATER 42%', cx + 18, waterTop + 44);
+    if (v.water > 0.12) ctx.fillText(`WATER ${Math.round(v.water * 100)}%`, cx + 18, waterTop + 44);
 
     // Ballast pipe with its two pumps and two valves.
     const py = 664;
@@ -190,8 +192,10 @@ export class OverviewScreen {
     ctx.fillStyle = HMI.textDim;
     ctx.font = `500 28px ${HMI_FONT.mono}`;
     ctx.fillText('PUMPS', left + 20, py + 10);
-    pump(ctx, left + 0.38 * hullW, py, 'PUMP 1', 'ON', HMI.text, t);
-    pump(ctx, left + 0.52 * hullW, py, 'PUMP 2', 'FAILED', HMI.warn, 0);
+    const p1c = v.pump1 === 'ON' ? HMI.text : v.pump1 === 'HOT' ? HMI.alarm : HMI.textDim;
+    const p2c = v.pump2 === 'ON' ? HMI.text : HMI.warn;
+    pump(ctx, left + 0.38 * hullW, py, 'PUMP 1', v.pump1, p1c, v.pump1 === 'OFF' ? 0 : t);
+    pump(ctx, left + 0.52 * hullW, py, 'PUMP 2', v.pump2, p2c, v.pump2 === 'ON' ? t : 0);
     valve(ctx, left + 0.68 * hullW, py, 'VALVE', 'OPEN', HMI.text);
     ctx.fillStyle = HMI.textDim;
     ctx.textAlign = 'right';
@@ -218,7 +222,8 @@ export class OverviewScreen {
     ctx.lineTo(w - 20, top + 56);
     ctx.stroke();
     ctx.font = `500 34px ${HMI_FONT.mono}`;
-    ALARMS.forEach((a, i) => {
+    this.view.alarms.slice(0, 3).forEach((alarm, i) => {
+      const a = { ...alarm, color: alarm.state === 'CLEARED' ? HMI.textDim : levelColour[alarm.level] };
       const y = top + 98 + i * 52;
       const fresh = a.state === 'NEW';
       // A filled marker, so colour is never the only cue.

@@ -53,11 +53,16 @@ export class TrendScreen {
       return { ...t, history };
     };
     this.trends = [
-      make({ tag: 'HULL', label: 'HULL STRESS', unit: '%', band: [20, 60], range: [0, 100], target: 84, noise: 1.4, warnAbove: 70, decimals: 0 }, 41, 1.6),
-      make({ tag: 'POWER', label: 'MAIN POWER', unit: '%', band: [55, 90], range: [0, 100], target: 61, noise: 1.2, warnBelow: 50, decimals: 0 }, 78, -0.7),
-      make({ tag: 'O2', label: 'OXYGEN', unit: '%', band: [19.5, 21.5], range: [17, 23], target: 20.4, noise: 0.06, warnBelow: 19.5, decimals: 1 }, 20.8, -0.015),
-      make({ tag: 'CO2', label: 'CO2 (BAD AIR)', unit: '%', band: [0, 0.5], range: [0, 1.5], target: 0.62, noise: 0.02, warnAbove: 0.5, decimals: 1 }, 0.31, 0.012),
+      make({ tag: 'hull', label: 'HULL STRENGTH', unit: '%', band: [45, 100], range: [0, 100], target: 72, noise: 0.5, warnBelow: 45, decimals: 0 }, 86, -0.9),
+      make({ tag: 'power', label: 'MAIN POWER', unit: '%', band: [45, 100], range: [0, 100], target: 66, noise: 0.6, warnBelow: 45, decimals: 0 }, 78, -0.5),
+      make({ tag: 'air', label: 'AIR QUALITY', unit: '%', band: [45, 100], range: [0, 100], target: 82, noise: 0.3, warnBelow: 45, decimals: 0 }, 88, -0.25),
+      make({ tag: 'morale', label: 'CREW MORALE', unit: '%', band: [40, 100], range: [0, 100], target: 64, noise: 0.4, warnBelow: 40, decimals: 0 }, 70, -0.25),
     ];
+  }
+
+  /** Point each trend at the live meter value; lines ease toward it. */
+  setTargets(m: Record<string, number>) {
+    for (const tr of this.trends) if (m[tr.tag] !== undefined) tr.target = m[tr.tag];
   }
 
   draw(t: number) {
@@ -67,7 +72,7 @@ export class TrendScreen {
       this.lastSample = sample;
       for (const tr of this.trends) {
         const last = tr.history[tr.history.length - 1];
-        const next = last + (tr.target - last) * 0.08 + (this.rand() - 0.5) * tr.noise;
+        const next = last + (tr.target - last) * 0.35 + (this.rand() - 0.5) * tr.noise;
         tr.history.push(next);
         tr.history.shift();
       }
@@ -109,7 +114,8 @@ export class TrendScreen {
     ctx.fillStyle = HMI.text;
     ctx.font = `600 40px ${HMI_FONT.label}`;
     ctx.fillText(tr.label, x + 20, y + 36);
-    const status = !out ? 'OK' : tr.warnAbove !== undefined ? 'TOO HIGH' : 'TOO LOW';
+    const critical = tr.warnBelow !== undefined && v < tr.warnBelow - 20;
+    const status = !out ? 'OK' : critical ? 'CRITICAL' : tr.warnAbove !== undefined ? 'TOO HIGH' : 'LOW';
     ctx.fillStyle = out ? HMI.warn : HMI.textDim;
     ctx.font = `600 30px ${HMI_FONT.mono}`;
     ctx.fillText(status, x + 20, y + 78);

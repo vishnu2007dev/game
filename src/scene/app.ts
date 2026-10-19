@@ -2,7 +2,10 @@ import * as THREE from 'three';
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildRoom } from './room';
-import { buildConsole } from './console';
+import { buildConsole, BAT_DOWN, BAT_UP, GUARD_OPEN, type PanelSwitch } from './console';
+import { Tweens, ease } from './tween';
+import { flapTexture } from './decals';
+import { audio } from '../audio/audio';
 import { buildPost } from './post';
 import { detectTier, prefersReducedMotion } from './quality';
 import { setTextureScale } from './textures';
@@ -16,6 +19,28 @@ declare global {
   interface Window {
     __READY?: boolean;
   }
+}
+
+/** What the game can do to the room. */
+export interface Station {
+  overview: OverviewScreen;
+  trends: TrendScreen;
+  switches: PanelSwitch[];
+  /** Called when the player opens a guard or throws a switch. */
+  onSwitch: (index: number, action: 'guard' | 'throw' | 'reset') => void;
+  /** Called when the player clicks the phone handset. */
+  onPhone: () => void;
+  /** Work a switch as if clicked: lift the guard, then throw it. */
+  operate(index: number): void;
+  setAlarm(on: boolean): void;
+  setLamp(index: number, mode: 'flash' | 'steady' | 'off'): void;
+  leanToPanel(on: boolean): void;
+  setRescueDays(n: number): Promise<void>;
+  printReport(lines: string[]): Promise<void>;
+  ring(on: boolean): void;
+  shake(strength: number, seconds: number): void;
+  /** Dim the room for night logs and day changes. */
+  setNight(on: boolean): void;
 }
 
 /** Camera framing for landscape and portrait screens. */
@@ -34,7 +59,7 @@ function frame(camera: THREE.PerspectiveCamera, aspect: number) {
   return { pos: new THREE.Vector3(0, 1.34, 1.0), look: new THREE.Vector3(-0.03, 1.22, -0.9) };
 }
 
-export function startScene(root: HTMLElement) {
+export function startScene(root: HTMLElement): Station {
   const tier = detectTier();
   const reduced = prefersReducedMotion();
   setTextureScale(tier === 'high' ? 1 : 0.5);
@@ -99,10 +124,52 @@ export function startScene(root: HTMLElement) {
   // Reading the monitors: click or tap a screen to lean in, Back, Esc or
   // another click to sit back. Keys 1 to 3 jump to each screen.
   const names = ['Station overview', 'Life support', 'Security cameras'];
-  const focus = new FocusController(
-    camera,
-    desk.screens.map((s, i) => ({ mesh: s.mesh, size: s.size, name: names[i] })),
-  );
+  const focus = new FocusController(camera, [
+    ...desk.screens.map((s, i) => ({ mesh: s.mesh, size: s.size, name: names[i] })),
+    { mesh: desk.panel.mesh, size: desk.panel.size, name: 'Switch panel' },
+  ]);
+  const panelTarget = focus.targets[3];
+  const tweens = new Tweens();
+  let station: Station;
+
+  // Switch handling. The first click lifts the guard, the second throws
+  // the switch, a third resets it. Hit boxes are oversized for thumbs.
+  const switchRay = new THREE.Raycaster();
+  const pickSwitch = (x: number, y: number) => {
+    const r = canvas.getBoundingClientRect();
+    switchRay.setFromCamera(new THREE.Vector2(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1), camera);
+    const hit = switchRay.intersectObjects(desk.switches.map((s) => s.hit), false)[0];
+    return hit ? desk.switches.findIndex((s) => s.hit === hit.object) : -1;
+  };
+  // The phone gets a generous hit box too, for answering by hand.
+  const phoneHit = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.16, 0.3), new THREE.MeshBasicMaterial({ visible: false }));
+  desk.handset.parent!.add(phoneHit);
+  phoneHit.position.set(0, 0.06, 0);
+  const pickPhone = (x: number, y: number) => {
+    const r = canvas.getBoundingClientRect();
+    switchRay.setFromCamera(new THREE.Vector2(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1), camera);
+    return switchRay.intersectObject(phoneHit, false).length > 0;
+  };
+  const operate = (i: number) => {
+    const sw = desk.switches[i];
+    if (!sw.open) {
+      sw.open = true;
+      audio.play('guard');
+      tweens.run(0.22, (k) => (sw.hinge.rotation.x = GUARD_OPEN * k), ease.out);
+      station.onSwitch(i, 'guard');
+    } else if (!sw.thrown) {
+      sw.thrown = true;
+      audio.play('toggle');
+      navigator.vibrate?.(30);
+      tweens.run(0.16, (k) => (sw.bat.rotation.x = BAT_DOWN + (BAT_UP - BAT_DOWN) * k), ease.snap);
+      station.onSwitch(i, 'throw');
+    } else {
+      sw.thrown = false;
+      audio.play('toggle', { volume: 0.7 });
+      tweens.run(0.16, (k) => (sw.bat.rotation.x = BAT_UP + (BAT_DOWN - BAT_UP) * k), ease.snap);
+      station.onSwitch(i, 'reset');
+    }
+  };
   const touch = matchMedia('(pointer: coarse)').matches;
   const hud = buildHud(root, touch);
   focus.onChange = (t) => hud.setFocused(t ? t.name : null);
@@ -115,13 +182,16 @@ export function startScene(root: HTMLElement) {
   canvas.addEventListener('pointerup', (e) => {
     if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 10) return;
     downAt = null;
+    const sw = pickSwitch(e.clientX, e.clientY);
+    if (sw >= 0) return operate(sw);
+    if (ringing && pickPhone(e.clientX, e.clientY)) return station.onPhone();
     const hit = focus.pick(e.clientX, e.clientY, canvas);
     if (hit) focus.toggle(hit);
     else if (focus.focused) focus.focus(null);
   });
   canvas.addEventListener('pointermove', (e) => {
     if (e.pointerType !== 'mouse') return;
-    canvas.classList.toggle('can-focus', !!focus.pick(e.clientX, e.clientY, canvas));
+    canvas.classList.toggle('can-focus', pickSwitch(e.clientX, e.clientY) >= 0 || !!focus.pick(e.clientX, e.clientY, canvas));
   });
   addEventListener('keydown', (e) => {
     if (e.key === 'Escape') focus.focus(null);
@@ -146,6 +216,84 @@ export function startScene(root: HTMLElement) {
   addEventListener('resize', resize);
   resize();
 
+  // Room state the game can change.
+  let alarmOn = true;
+  let ringing = false;
+  let nextRing = 0;
+  let shakeUntil = 0;
+  let shakeStrength = 0;
+  let night = 0;
+  let nightTarget = 0;
+  const flapTex = new Map<string, THREE.Texture>();
+  const flapFor = (ch: string) => {
+    if (!flapTex.has(ch)) flapTex.set(ch, flapTexture(ch));
+    return flapTex.get(ch)!;
+  };
+  let rescueShown = '13';
+  const lampLight = desk.lamp.light;
+  const lampBase = lampLight.intensity;
+
+  station = {
+    overview,
+    trends,
+    switches: desk.switches,
+    onSwitch: () => {},
+    onPhone: () => {},
+    operate,
+    setAlarm(on) {
+      alarmOn = on;
+      if (on) audio.startAlarm();
+      else audio.stopAlarm();
+    },
+    setLamp(i, mode) {
+      desk.switches[i].lamp.mode = mode;
+    },
+    leanToPanel(on) {
+      focus.focus(on ? panelTarget : null);
+    },
+    async setRescueDays(n) {
+      const next = String(n).padStart(2, ' ');
+      const prev = rescueShown.padStart(2, ' ');
+      rescueShown = next;
+      await Promise.all(
+        desk.flaps.map(async (flap, i) => {
+          if (next[i] === prev[i]) return;
+          await new Promise((r) => setTimeout(r, i * 120));
+          audio.play('flap');
+          // A few intermediate cards fall before the new one lands.
+          for (let step = 0; step < 4; step++) {
+            await tweens.run(0.06, (k) => (flap.scale.y = 1 - k * 0.92), ease.inOut);
+            const ch = step === 3 ? next[i] : String((Number(prev[i]) + step + 1) % 10);
+            (flap.material as THREE.MeshStandardMaterial).map = flapFor(ch === ' ' ? '' : ch);
+            (flap.material as THREE.MeshStandardMaterial).needsUpdate = true;
+            await tweens.run(0.06, (k) => (flap.scale.y = 0.08 + k * 0.92), ease.out);
+          }
+        }),
+      );
+    },
+    async printReport(lines) {
+      desk.paper.lines = lines;
+      desk.paper.draw();
+      const map = (desk.sheet.material as THREE.MeshStandardMaterial).map!;
+      const ticks = setInterval(() => audio.play('printer', { volume: 0.6, pan: 0.5 }), 420);
+      await tweens.run(2.2, (k) => (map.offset.y = (1 - k) * -0.35), ease.inOut);
+      clearInterval(ticks);
+    },
+    ring(on) {
+      ringing = on;
+      nextRing = 0;
+      if (!on) desk.handset.rotation.set(0, 0, 0);
+    },
+    shake(strength, seconds) {
+      if (reduced) return;
+      shakeStrength = strength;
+      shakeUntil = clock.getElapsedTime() + seconds;
+    },
+    setNight(on) {
+      nightTarget = on ? 1 : 0;
+    },
+  };
+
   const clock = new THREE.Clock();
   let frames = 0;
   let lastHmi = -1;
@@ -168,7 +316,27 @@ export function startScene(root: HTMLElement) {
     const breathe = reduced ? 0 : Math.sin(t * 0.55) * (focus.focused ? 0.0008 : 0.004);
     camera.position.copy(pose.pos);
     camera.position.y += breathe;
+    if (t < shakeUntil) {
+      const fade = (shakeUntil - t) * shakeStrength;
+      camera.position.x += (Math.random() - 0.5) * 0.01 * fade;
+      camera.position.y += (Math.random() - 0.5) * 0.01 * fade;
+    }
     camera.lookAt(pose.look);
+    tweens.tick(t);
+
+    // Night dims the practical lights; the screens stay on.
+    night += (nightTarget - night) * Math.min(1, dt * 1.5);
+    lampLight.intensity = lampBase * (1 - night * 0.75);
+
+    // The phone rings in bursts and the handset rattles in its cradle.
+    if (ringing) {
+      if (t > nextRing) {
+        audio.play('phoneRing', { pan: -0.5 });
+        nextRing = t + 2.8;
+      }
+      const burst = (nextRing - t) > 1.6;
+      desk.handset.rotation.z = burst && !reduced ? Math.sin(t * 90) * 0.02 : 0;
+    }
 
     // Screens refresh at their own rates, like real panel PCs.
     if (t - lastHmi > 0.1) {
@@ -184,12 +352,13 @@ export function startScene(root: HTMLElement) {
       cctv.texture.needsUpdate = true;
     }
 
-    // Beacon: two reflectors turning at about 40 rpm.
+    // Beacon: two reflectors turning at about 40 rpm, only in an alarm.
     const spin = reduced ? 0 : t * 4.2;
     desk.beacon.pivot.rotation.y = spin;
     const facing = Math.max(0, Math.cos(spin)) ** 6 + Math.max(0, Math.cos(spin + Math.PI)) ** 6;
-    desk.beacon.dome.emissiveIntensity = 1.4 + facing * 6;
-    redWash.intensity = 0.35 + facing * 0.9;
+    desk.beacon.dome.emissiveIntensity = alarmOn ? 1.4 + facing * 6 : 0.08;
+    for (const l of desk.beacon.lights) l.visible = alarmOn;
+    redWash.intensity = alarmOn ? 0.35 + facing * 0.9 : 0;
 
     const flashOn = Math.floor(t * 2) % 2 === 0;
     for (const ind of desk.indicators) {
@@ -201,4 +370,6 @@ export function startScene(root: HTMLElement) {
 
     if (frames === 3) window.__READY = true;
   });
+
+  return station;
 }

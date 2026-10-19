@@ -20,7 +20,28 @@ export interface Console {
   indicators: { mat: THREE.MeshStandardMaterial; mode: 'flash' | 'steady' | 'off'; color: THREE.Color }[];
   screens: { mesh: THREE.Mesh; size: [number, number] }[];
   flaps: THREE.Mesh[];
+  switches: PanelSwitch[];
+  /** Invisible plane over the switch panel, used to lean in to it. */
+  panel: { mesh: THREE.Mesh; size: [number, number] };
+  paper: PrinterPaper;
+  sheet: THREE.Mesh;
+  handset: THREE.Group;
 }
+
+export interface PanelSwitch {
+  hinge: THREE.Group;
+  bat: THREE.Mesh;
+  /** Generous invisible box so the switch is easy to hit on a phone. */
+  hit: THREE.Mesh;
+  lamp: { mat: THREE.MeshStandardMaterial; mode: 'flash' | 'steady' | 'off'; color: THREE.Color };
+  open: boolean;
+  thrown: boolean;
+}
+
+/** Toggle bat angle when resting down and when thrown up. */
+export const BAT_DOWN = Math.PI / 2 - 0.45;
+export const BAT_UP = Math.PI / 2 + 0.45;
+export const GUARD_OPEN = -1.95;
 
 /** A rounded box whose UVs follow world position, for continuous wear. */
 function box(w: number, h: number, d: number, mat: THREE.Material, r = 0.006, at = new THREE.Vector3(), tile = 0.9) {
@@ -174,11 +195,12 @@ export function buildConsole(screens: ScreenSet): Console {
     depthWrite: false,
   });
   const switchDefs = [
-    { label: 'DOOR C1 C2', lamp: 0xffa31a, mode: 'flash' as const, open: true },
+    { label: 'DOOR C1 C2', lamp: 0xffa31a, mode: 'off' as const, open: false },
     { label: 'DOOR C2 C3', lamp: 0x37d36b, mode: 'steady' as const, open: false },
-    { label: 'BALLAST', lamp: 0x37d36b, mode: 'steady' as const, open: false },
+    { label: 'BALLAST', lamp: 0xffa31a, mode: 'off' as const, open: false },
     { label: 'VENT', lamp: 0x37d36b, mode: 'off' as const, open: false },
   ];
+  const switches: PanelSwitch[] = [];
   switchDefs.forEach((s, i) => {
     const x = -0.33 + i * 0.105;
     panel.add(box(0.052, 0.064, 0.004, alu, 0.003, new THREE.Vector3(x, 0, 0.004)));
@@ -190,16 +212,15 @@ export function buildConsole(screens: ScreenSet): Console {
     bat.geometry.translate(0, 0.015, 0);
     bat.position.set(x, 0, 0.011);
     // Toggles rest down; the bat leans toward the operator.
-    bat.rotation.x = Math.PI / 2 - 0.45;
-    bat.rotation.z = 0;
+    bat.rotation.x = BAT_DOWN;
     panel.add(shadows(bat));
     const batTip = new THREE.Mesh(new THREE.SphereGeometry(0.0038, 12, 8), chrome);
     batTip.position.set(0, 0.03, 0);
     bat.add(batTip);
-    // Hinged guard cover. The flood switch has been lifted, ready.
+    // Hinged guard cover over each switch.
     const hinge = new THREE.Group();
     hinge.position.set(x, 0.03, 0.006);
-    hinge.rotation.x = s.open ? -1.95 : 0;
+    hinge.rotation.x = s.open ? GUARD_OPEN : 0;
     const cover = new THREE.Mesh(new RoundedBoxGeometry(0.042, 0.06, 0.032, 2, 0.004), coverMat);
     cover.position.set(0, -0.03, 0.016);
     hinge.add(cover);
@@ -214,12 +235,21 @@ export function buildConsole(screens: ScreenSet): Console {
     lens.rotation.x = Math.PI / 2;
     lens.position.set(x, 0.062, 0.01);
     panel.add(lens);
-    indicators.push({ mat: lensMat, mode: s.mode, color: new THREE.Color(s.lamp) });
+    const lamp = { mat: lensMat, mode: s.mode, color: new THREE.Color(s.lamp) };
+    indicators.push(lamp);
     const label = dymoLabel(s.label, { seed: 20 + i, height: 0.012 });
     label.position.set(x, -0.058, 0.0045);
     label.rotation.z = (i % 2 ? 1 : -1) * 0.012;
     panel.add(label);
+    const hit = new THREE.Mesh(new THREE.BoxGeometry(0.095, 0.14, 0.07), new THREE.MeshBasicMaterial({ visible: false }));
+    hit.position.set(x, 0.004, 0.02);
+    hit.name = `switch:${i}`;
+    panel.add(hit);
+    switches.push({ hinge, bat, hit, lamp, open: s.open, thrown: false });
   });
+  const panelTarget = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.2), new THREE.MeshBasicMaterial({ visible: false }));
+  panelTarget.position.set(0, 0, 0.03);
+  panel.add(panelTarget);
 
   // Rotary mode selector with engraved positions.
   const selX = 0.13;
@@ -534,6 +564,11 @@ export function buildConsole(screens: ScreenSet): Console {
     indicators,
     screens: screenMeshes,
     flaps,
+    switches,
+    panel: { mesh: panelTarget, size: [0.84, 0.26] },
+    paper,
+    sheet,
+    handset,
   };
 }
 

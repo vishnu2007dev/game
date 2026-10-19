@@ -1,0 +1,816 @@
+/* Overlay layer: radio transcripts, printouts and alarm placards laid
+   over the film image. One dark single-theme world, so every colour is
+   set explicitly here. */
+:root {
+  --ov-ink: #e6e9ec;
+  --ov-dim: #8d959c;
+  --ov-line: rgba(205, 210, 214, 0.28);
+  --ov-panel: rgba(8, 10, 12, 0.9);
+  --ov-amber: #f2a900;
+  --ov-red: #d7261e;
+  --ov-green: #4fc77a;
+  --ov-paper: #e9e4d5;
+  --ov-paper-ink: #24221e;
+  --ov-label: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  --ov-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --ov-dot: 'VT323', ui-monospace, monospace;
+  --ov-gutter-l: max(16px, env(safe-area-inset-left, 0px));
+  --ov-gutter-r: max(16px, env(safe-area-inset-right, 0px));
+}
+
+.ov {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  color: var(--ov-ink);
+  font-family: var(--ov-mono);
+}
+
+.ov > *,
+.ov-bottom > *,
+.ov-top > * {
+  pointer-events: auto;
+}
+
+.ov-label {
+  display: block;
+  font: 500 11px/1.3 var(--ov-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ov-dim);
+}
+
+/* Top strip: today's objective and the four meters. */
+.ov-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px 24px;
+  padding: calc(14px + env(safe-area-inset-top, 0px)) var(--ov-gutter-r) 0 var(--ov-gutter-l);
+  pointer-events: none;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+
+.ov-objective-text {
+  display: block;
+  margin-top: 2px;
+  font: 600 22px/1.1 var(--ov-label);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.ov-meters {
+  display: flex;
+  gap: 18px;
+}
+
+.ov-meter {
+  position: relative;
+  min-width: 52px;
+}
+
+.ov-meter-value {
+  display: block;
+  font: 600 26px/1 var(--ov-label);
+  font-variant-numeric: tabular-nums;
+}
+
+.ov-meter.is-low .ov-meter-value {
+  color: var(--ov-amber);
+}
+
+.ov-meter-delta {
+  position: absolute;
+  left: 100%;
+  bottom: 2px;
+  margin-left: 2px;
+  font: 600 13px var(--ov-mono);
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.3s, transform 0.3s;
+}
+
+.ov-meter-delta.is-shown {
+  opacity: 1;
+  transform: none;
+}
+
+.ov-meter-delta.is-up {
+  color: var(--ov-ink);
+}
+
+.ov-meter-delta.is-down {
+  color: var(--ov-amber);
+}
+
+/* Bottom stack: incoming calls, the call panel, radio lines. */
+.ov-bottom {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: min(760px, 100%);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 0 var(--ov-gutter-r) calc(52px + env(safe-area-inset-bottom, 0px)) var(--ov-gutter-l);
+  pointer-events: none;
+}
+
+.ov-call,
+.ov-radio,
+.ov-incoming {
+  background: var(--ov-panel);
+  border-top: 1px solid var(--ov-line);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+  animation: ov-rise 0.28s ease-out;
+}
+
+.ov-call {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 18px 16px;
+  max-height: min(70vh, 640px);
+  overflow-y: auto;
+}
+
+.ov-call-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.ov-call-head .ov-label {
+  display: inline;
+}
+
+.ov-signal {
+  width: 8px;
+  height: 8px;
+  background: var(--ov-green);
+  align-self: center;
+  animation: ov-blink 1.2s steps(2) infinite;
+}
+
+.ov-call-who {
+  font: 600 20px/1 var(--ov-label);
+  letter-spacing: 0.08em;
+}
+
+.ov-call-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ov-line {
+  margin: 0;
+  font: 400 15px/1.55 var(--ov-mono);
+  max-width: 64ch;
+  min-height: 1.55em;
+}
+
+.ov-picked {
+  margin: 4px 0 0;
+  font: 500 13px/1.4 var(--ov-mono);
+  color: var(--ov-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ov-choices {
+  display: grid;
+  gap: 8px;
+}
+
+.ov-choice {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 12px;
+  row-gap: 2px;
+  align-items: baseline;
+  text-align: left;
+  padding: 11px 14px;
+  color: var(--ov-ink);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--ov-line);
+  border-radius: 0;
+  cursor: pointer;
+  font: inherit;
+}
+
+.ov-choice:hover {
+  border-color: var(--ov-ink);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.ov-choice kbd {
+  grid-row: span 2;
+  align-self: center;
+  min-width: 22px;
+  padding: 2px 0;
+  text-align: center;
+  font: 600 12px var(--ov-mono);
+  color: var(--ov-dim);
+  border: 1px solid var(--ov-line);
+}
+
+.ov-choice-label {
+  font: 600 19px/1.15 var(--ov-label);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.ov-choice-hint {
+  grid-column: 2;
+  font: 400 12.5px/1.4 var(--ov-mono);
+  color: var(--ov-dim);
+}
+
+.ov-choice-hint:empty {
+  display: none;
+}
+
+.ov-scan {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ov-btn-scan {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  text-align: left;
+  border-style: dashed;
+  text-transform: none;
+  letter-spacing: 0;
+  font: 400 14px/1.4 var(--ov-mono);
+}
+
+.ov-btn-scan .ov-label {
+  display: inline;
+  color: var(--ov-ink);
+}
+
+.ov-scan-left {
+  margin-left: auto;
+  color: var(--ov-dim);
+  font-size: 12px;
+}
+
+.ov-scan-result {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font: 400 13px/1.5 var(--ov-mono);
+  color: var(--ov-dim);
+}
+
+.ov-scan-result:empty {
+  display: none;
+}
+
+.ov-scan-result.is-busy {
+  animation: ov-blink 0.6s steps(2) infinite;
+}
+
+.ov-scan-result strong {
+  font: 700 15px var(--ov-mono);
+  letter-spacing: 0.08em;
+}
+
+.ov-scan-result.is-true strong {
+  color: var(--ov-green);
+}
+
+.ov-scan-result.is-false strong {
+  color: var(--ov-amber);
+}
+
+/* Buttons are square hardware keys, not pills. */
+.ov-btn {
+  align-self: flex-start;
+  padding: 10px 16px;
+  color: var(--ov-ink);
+  background: rgba(10, 12, 14, 0.75);
+  border: 1px solid var(--ov-line);
+  border-radius: 0;
+  font: 500 13px/1 var(--ov-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.ov-btn:hover {
+  border-color: var(--ov-ink);
+}
+
+.ov-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.ov-btn-primary {
+  color: #0b0d0f;
+  background: var(--ov-ink);
+  border-color: var(--ov-ink);
+}
+
+.ov-btn-primary:hover {
+  background: #ffffff;
+}
+
+.ov button:focus-visible {
+  outline: 2px solid var(--ov-amber);
+  outline-offset: 2px;
+}
+
+.ov-incoming {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px 12px 16px;
+}
+
+.ov-incoming-text {
+  flex: 1;
+  font: 600 19px/1.2 var(--ov-label);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.ov-ring {
+  width: 10px;
+  height: 10px;
+  background: var(--ov-amber);
+  animation: ov-blink 0.5s steps(2) infinite;
+}
+
+.ov-radio {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 12px 16px;
+}
+
+.ov-radio-text {
+  font: 400 15px/1.5 var(--ov-mono);
+}
+
+/* Title screen. */
+.ov-gate {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  padding: 0 var(--ov-gutter-r) calc(10vh + env(safe-area-inset-bottom, 0px)) var(--ov-gutter-l);
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.92), rgba(0, 0, 0, 0.62) 50%, rgba(0, 0, 0, 0.2));
+}
+
+.ov-gate-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+  max-width: 640px;
+  padding-left: clamp(0px, 4vw, 48px);
+}
+
+.ov-kicker {
+  margin: 0;
+  font: 500 12px var(--ov-mono);
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--ov-dim);
+}
+
+.ov-gate h1 {
+  margin: 0;
+  font: 700 clamp(64px, 13vw, 156px) / 0.86 var(--ov-label);
+  letter-spacing: 0.01em;
+}
+
+.ov-tagline {
+  margin: 0;
+  font: 500 clamp(20px, 2.8vw, 30px) / 1.25 var(--ov-label);
+  letter-spacing: 0.02em;
+  text-wrap: balance;
+}
+
+.ov-small {
+  margin: 0;
+  font: 400 12px var(--ov-mono);
+  color: var(--ov-dim);
+}
+
+.ov-gate .ov-btn-primary {
+  padding: 15px 26px;
+  font-size: 14px;
+}
+
+/* Black cards between scenes. */
+.ov-card {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 0 var(--ov-gutter-r) 0 max(16px, 12vw);
+  background: #000;
+  animation: ov-fade 0.5s ease-out;
+}
+
+.ov-card-log {
+  margin: 0;
+  font: 400 clamp(15px, 2vw, 19px) / 1.7 var(--ov-mono);
+  letter-spacing: 0.06em;
+}
+
+.ov-card-day {
+  margin: 0;
+  font: 700 clamp(64px, 12vw, 140px) / 0.9 var(--ov-label);
+}
+
+.ov-card-sub {
+  margin: 12px 0 0;
+  font: 500 14px var(--ov-mono);
+  letter-spacing: 0.24em;
+  color: var(--ov-dim);
+}
+
+/* Morning printout. */
+.ov-report-wrap {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 16px var(--ov-gutter-r) 16px var(--ov-gutter-l);
+  background: rgba(0, 0, 0, 0.55);
+  animation: ov-fade 0.3s ease-out;
+}
+
+.ov-paper {
+  width: min(480px, 100%);
+  box-sizing: border-box;
+  max-height: 72vh;
+  overflow-y: auto;
+  padding: 22px 46px 18px;
+  color: var(--ov-paper-ink);
+  background:
+    radial-gradient(circle at 16px 12px, #1c1c1a 5px, transparent 5.5px) 0 0 / 100% 24px repeat-y,
+    radial-gradient(circle at calc(100% - 16px) 12px, #1c1c1a 5px, transparent 5.5px) 0 0 / 100% 24px repeat-y,
+    repeating-linear-gradient(180deg, rgba(110, 150, 110, 0.14) 0 44px, transparent 44px 88px),
+    var(--ov-paper);
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.65);
+  transform: rotate(-0.6deg);
+  animation: ov-feed 0.6s ease-out;
+}
+
+.ov-paper-head {
+  margin: 0 0 12px;
+  font: 400 22px/1.15 var(--ov-dot);
+}
+
+.ov-paper-lines {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font: 400 21px/1.25 var(--ov-dot);
+}
+
+.ov-paper-lines li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+}
+
+.ov-sure {
+  flex: none;
+  font-size: 17px;
+}
+
+.ov-sure.is-likely {
+  text-decoration: underline dotted;
+}
+
+.ov-sure.is-unsure {
+  color: #8a4b0c;
+}
+
+.ov-paper-key {
+  margin: 12px 0 0;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(0, 0, 0, 0.3);
+  font: 400 17px/1.2 var(--ov-dot);
+  color: #55524a;
+}
+
+.ov-report-wrap .ov-btn {
+  align-self: center;
+}
+
+/* Emergency placard. */
+.ov-emergency {
+  position: fixed;
+  top: calc(86px + env(safe-area-inset-top, 0px));
+  left: var(--ov-gutter-l);
+  width: min(620px, calc(100% - 32px));
+  box-sizing: border-box;
+  padding: 14px 18px 16px;
+  background: rgba(58, 6, 4, 0.9);
+  border: 1px solid var(--ov-red);
+  animation: ov-rise 0.25s ease-out;
+  transition: background 0.3s, border-color 0.3s;
+}
+
+.ov-emergency-alarm {
+  margin: 0;
+  font: 700 30px/1 var(--ov-label);
+  letter-spacing: 0.04em;
+}
+
+.ov-emergency-do {
+  margin: 8px 0 0;
+  font: 600 21px/1.2 var(--ov-label);
+  text-transform: uppercase;
+}
+
+.ov-emergency-hint {
+  margin: 6px 0 0;
+  font: 400 13px/1.45 var(--ov-mono);
+  color: #f1c8c2;
+}
+
+.ov-timer {
+  position: relative;
+  margin-top: 12px;
+  height: 22px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.ov-timer-fill {
+  position: absolute;
+  inset: 0;
+  background: var(--ov-amber);
+  transform-origin: left;
+  transition: transform 0.12s linear;
+}
+
+.ov-emergency.is-urgent .ov-timer-fill {
+  background: var(--ov-red);
+}
+
+.ov-timer-num {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font: 600 13px var(--ov-mono);
+  color: #0b0b0b;
+}
+
+.ov-emergency.is-done {
+  background: rgba(8, 40, 20, 0.92);
+  border-color: var(--ov-green);
+}
+
+.ov-emergency.is-missed {
+  opacity: 0.6;
+}
+
+/* Night comms log: a terminal in the dimmed room. */
+.ov-night {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(580px, 100%);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: calc(20px + env(safe-area-inset-top, 0px)) var(--ov-gutter-r) calc(20px + env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-left, 0px));
+  overflow-y: auto;
+  background:
+    repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 3px),
+    rgba(4, 7, 8, 0.94);
+  border-left: 1px solid var(--ov-line);
+  animation: ov-slide 0.4s ease-out;
+}
+
+.ov-night-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font: 600 20px var(--ov-label);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.ov-night-lines {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ov-night-lines li {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  column-gap: 12px;
+  font: 400 14px/1.5 var(--ov-mono);
+}
+
+.ov-night-time {
+  color: var(--ov-dim);
+}
+
+.ov-night-who {
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.ov-night-text {
+  grid-column: 2;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ov-night-lines li.is-clue {
+  padding-left: 10px;
+  margin-left: -12px;
+  border-left: 2px solid var(--ov-amber);
+}
+
+.ov-clue-tag {
+  grid-column: 2;
+  justify-self: start;
+  margin-top: 4px;
+  padding: 1px 6px;
+  font: 600 10px var(--ov-mono);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ov-amber);
+  border: 1px solid currentColor;
+}
+
+/* End of preview. */
+.ov-end {
+  position: fixed;
+  inset: 0;
+  overflow-y: auto;
+  padding: calc(48px + env(safe-area-inset-top, 0px)) var(--ov-gutter-r) calc(48px + env(safe-area-inset-bottom, 0px)) var(--ov-gutter-l);
+  background: rgba(0, 0, 0, 0.9);
+  animation: ov-fade 0.6s ease-out;
+}
+
+.ov-end > * {
+  max-width: 760px;
+  margin-inline: auto;
+}
+
+.ov-end h2 {
+  margin: 10px auto 28px;
+  font: 700 clamp(38px, 7vw, 72px) / 0.95 var(--ov-label);
+  text-wrap: balance;
+}
+
+.ov-end-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 28px;
+}
+
+.ov-end-grid ul {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font: 400 14px/1.5 var(--ov-mono);
+}
+
+.ov-end-meters li {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--ov-line);
+  padding-bottom: 4px;
+}
+
+.ov-end-num {
+  font-variant-numeric: tabular-nums;
+}
+
+.ov-end-clues li {
+  padding-left: 10px;
+  border-left: 2px solid var(--ov-amber);
+}
+
+.ov-end-q {
+  margin-top: 36px;
+  margin-bottom: 12px;
+  font: 600 24px/1.2 var(--ov-label);
+  text-transform: uppercase;
+}
+
+.ov-end-theories {
+  display: grid;
+  gap: 8px;
+}
+
+.ov-end-note {
+  margin: 0 0 6px;
+  font: 400 15px/1.6 var(--ov-mono);
+  max-width: 62ch;
+}
+
+.is-leaving {
+  opacity: 0 !important;
+  transition: opacity 0.35s !important;
+  animation: none !important;
+}
+
+@keyframes ov-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+@keyframes ov-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes ov-slide {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}
+
+@keyframes ov-feed {
+  from {
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes ov-blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@media (max-width: 640px) {
+  .ov-meters {
+    gap: 12px;
+  }
+  .ov-meter-value {
+    font-size: 22px;
+  }
+  .ov-objective-text {
+    font-size: 19px;
+  }
+  .ov-end-grid {
+    grid-template-columns: 1fr;
+  }
+  .ov-line {
+    font-size: 14px;
+  }
+  .ov-paper {
+    padding-inline: 38px;
+  }
+  .ov-emergency {
+    top: calc(118px + env(safe-area-inset-top, 0px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ov *,
+  .ov {
+    animation: none !important;
+    transition: none !important;
+  }
+}
