@@ -9,6 +9,8 @@ import { setTextureScale } from './textures';
 import { OverviewScreen } from '../hmi/overview';
 import { TrendScreen } from '../hmi/trends';
 import { CctvScreen } from '../hmi/cctv';
+import { FocusController, type Pose } from './focus';
+import { buildHud } from '../ui/hud';
 
 declare global {
   interface Window {
@@ -94,6 +96,39 @@ export function startScene(root: HTMLElement) {
 
   const composer = buildPost(renderer, scene, camera, tier);
 
+  // Reading the monitors: click or tap a screen to lean in, Back, Esc or
+  // another click to sit back. Keys 1 to 3 jump to each screen.
+  const names = ['Station overview', 'Life support', 'Security cameras'];
+  const focus = new FocusController(
+    camera,
+    desk.screens.map((s, i) => ({ mesh: s.mesh, size: s.size, name: names[i] })),
+  );
+  const touch = matchMedia('(pointer: coarse)').matches;
+  const hud = buildHud(root, touch);
+  focus.onChange = (t) => hud.setFocused(t ? t.name : null);
+  hud.back.addEventListener('click', () => focus.focus(null));
+  const canvas = renderer.domElement;
+  let downAt: [number, number] | null = null;
+  canvas.addEventListener('pointerdown', (e) => {
+    downAt = [e.clientX, e.clientY];
+  });
+  canvas.addEventListener('pointerup', (e) => {
+    if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 10) return;
+    downAt = null;
+    const hit = focus.pick(e.clientX, e.clientY, canvas);
+    if (hit) focus.toggle(hit);
+    else if (focus.focused) focus.focus(null);
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (e.pointerType !== 'mouse') return;
+    canvas.classList.toggle('can-focus', !!focus.pick(e.clientX, e.clientY, canvas));
+  });
+  addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') focus.focus(null);
+    const n = Number(e.key);
+    if (n >= 1 && n <= focus.targets.length) focus.toggle(focus.targets[n - 1]);
+  });
+
   // Pointer parallax: the head moves a few centimetres, not the room.
   const pointer = new THREE.Vector2();
   const eased = new THREE.Vector2();
@@ -115,17 +150,25 @@ export function startScene(root: HTMLElement) {
   let frames = 0;
   let lastHmi = -1;
   let lastCctv = -1;
-  const lookAt = new THREE.Vector3();
+  const rest: Pose = { pos: new THREE.Vector3(), look: new THREE.Vector3() };
+  let lastT = 0;
 
   renderer.setAnimationLoop(() => {
     const t = clock.getElapsedTime();
     frames++;
 
+    const dt = Math.min(0.1, t - lastT);
+    lastT = t;
     if (!reduced) eased.lerp(pointer, 0.04);
-    const breathe = reduced ? 0 : Math.sin(t * 0.55) * 0.004;
-    camera.position.copy(shot.pos).add(new THREE.Vector3(eased.x * 0.035, -eased.y * 0.02 + breathe, 0));
-    lookAt.copy(shot.look).add(new THREE.Vector3(eased.x * 0.01, -eased.y * 0.006, 0));
-    camera.lookAt(lookAt);
+    // Parallax only at the desk; reading a screen should hold still.
+    const sway = focus.focused ? 0 : 1;
+    rest.pos.copy(shot.pos).add(new THREE.Vector3(eased.x * 0.035 * sway, -eased.y * 0.02 * sway, 0));
+    rest.look.copy(shot.look).add(new THREE.Vector3(eased.x * 0.01 * sway, -eased.y * 0.006 * sway, 0));
+    const pose = focus.update(dt, rest, reduced);
+    const breathe = reduced ? 0 : Math.sin(t * 0.55) * (focus.focused ? 0.0008 : 0.004);
+    camera.position.copy(pose.pos);
+    camera.position.y += breathe;
+    camera.lookAt(pose.look);
 
     // Screens refresh at their own rates, like real panel PCs.
     if (t - lastHmi > 0.1) {

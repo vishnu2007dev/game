@@ -13,10 +13,10 @@ interface Feed {
 }
 
 const FEEDS: Feed[] = [
-  { cam: 'CAM 01', room: 'C1 COMMAND', light: [0.3, 0.1, 0.8], tint: 0.95, figures: [{ x: 0.62, y: 0.64, s: 1.0, sway: 0.4 }] },
-  { cam: 'CAM 02', room: 'C2 BALLAST', lost: true, light: [0.5, 0.2, 0.6], tint: 0.8, figures: [] },
-  { cam: 'CAM 04', room: 'C4 LAB', light: [0.7, 0.05, 0.9], tint: 1.0, figures: [{ x: 0.36, y: 0.62, s: 0.9, sway: 0.8 }, { x: 0.7, y: 0.7, s: 1.15, sway: 0.3 }] },
-  { cam: 'CAM 06', room: 'C6 DIVE', light: [0.2, 0.3, 0.7], tint: 0.85, figures: [{ x: 0.5, y: 0.6, s: 0.8, sway: 1.2 }] },
+  { cam: 'CAM 1', room: 'COMMAND', light: [0.3, 0.1, 0.8], tint: 0.95, figures: [{ x: 0.62, y: 0.64, s: 1.0, sway: 0.4 }] },
+  { cam: 'CAM 2', room: 'BALLAST', lost: true, light: [0.5, 0.2, 0.6], tint: 0.8, figures: [] },
+  { cam: 'CAM 4', room: 'LAB', light: [0.7, 0.05, 0.9], tint: 1.0, figures: [{ x: 0.36, y: 0.62, s: 0.9, sway: 0.8 }, { x: 0.7, y: 0.7, s: 1.15, sway: 0.3 }] },
+  { cam: 'CAM 6', room: 'DIVE BAY', light: [0.2, 0.3, 0.7], tint: 0.85, figures: [{ x: 0.5, y: 0.6, s: 0.8, sway: 1.2 }] },
 ];
 
 /**
@@ -134,6 +134,8 @@ export class CctvScreen {
       ctx.font = `600 40px ${HMI_FONT.mono}`;
       ctx.textAlign = 'center';
       ctx.fillText('NO SIGNAL', x + w / 2, y + h / 2 + 10);
+      ctx.font = `500 26px ${HMI_FONT.mono}`;
+      ctx.fillText('CAMERA UNDER WATER?', x + w / 2, y + h / 2 + 56);
       ctx.textAlign = 'left';
     } else {
       ctx.drawImage(this.scenes[i], x, y, w, h);
@@ -157,14 +159,14 @@ export class CctvScreen {
       ctx.fillRect(x, y, w, h);
     }
     // Camera overlay in the standard white text with a dark outline.
-    ctx.font = `500 24px ${HMI_FONT.mono}`;
-    ctx.lineWidth = 4;
+    ctx.font = `600 32px ${HMI_FONT.mono}`;
+    ctx.lineWidth = 5;
     ctx.strokeStyle = 'rgba(0,0,0,0.8)';
     ctx.fillStyle = '#f0f0f0';
     const label = `${f.cam}  ${f.room}`;
-    ctx.strokeText(label, x + 16, y + 34);
-    ctx.fillText(label, x + 16, y + 34);
-    const ts = `DAY 01  ${clock(t)}`;
+    ctx.strokeText(label, x + 18, y + 42);
+    ctx.fillText(label, x + 18, y + 42);
+    const ts = `DAY 1  ${clock(t)}`;
     ctx.strokeText(ts, x + 16, y + h - 18);
     ctx.fillText(ts, x + 16, y + h - 18);
     ctx.restore();

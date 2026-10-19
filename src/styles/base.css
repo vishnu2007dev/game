@@ -33,3 +33,69 @@ body {
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+/* Overlay text sits on the film image like a camera operator's slate:
+   small, uppercase, no boxes unless it is a control. */
+.hud {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 max(16px, env(safe-area-inset-right, 0px)) calc(14px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  pointer-events: none;
+  font: 500 12px/1.4 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--hmi-text);
+}
+
+.hud p {
+  margin: 0;
+  opacity: 0.72;
+  text-shadow: 0 1px 2px #000;
+}
+
+.hud-hint::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 8px;
+  border: 1px solid currentColor;
+  vertical-align: 1px;
+}
+
+.hud-back {
+  pointer-events: auto;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: var(--hmi-text);
+  background: rgba(10, 12, 14, 0.72);
+  border: 1px solid rgba(199, 204, 209, 0.45);
+  border-radius: 0;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+
+.hud-back:hover {
+  border-color: var(--hmi-text);
+}
+
+.hud-back:focus-visible {
+  outline: 2px solid #f2a900;
+  outline-offset: 2px;
+}
+
+.hud-rotate {
+  text-align: right;
+  max-width: 22ch;
+}
+
+#app canvas.can-focus {
+  cursor: pointer;
+}

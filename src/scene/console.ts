@@ -134,9 +134,10 @@ export function buildConsole(screens: ScreenSet): Console {
   monitor(wings[1], screens.right, 0.5, 0.3125, new THREE.Vector3(0.34, DESK_Y + 0.38, 0.03), -0.07, 'OPS 3  CCTV');
 
   // Someone's reminder, stuck to the bezel.
-  const note = stickyNote(['P-202 TRIPS', 'RESET AT', 'BREAKER 7'], 11);
-  note.position.set(-0.335, -0.2, 0.027);
-  note.rotation.z = 0.08;
+  const note = stickyNote(['PUMP 2 STICKS', 'RESET AT', 'BREAKER 7'], 11);
+  // Stuck on the bezel edge, clear of the display.
+  note.position.set(-0.372, 0.13, 0.027);
+  note.rotation.z = 0.06;
   centreMon.add(note);
 
   // Sloped control strip in front of the centre section.
@@ -173,8 +174,8 @@ export function buildConsole(screens: ScreenSet): Console {
     depthWrite: false,
   });
   const switchDefs = [
-    { label: 'BHD 1-2', lamp: 0xffa31a, mode: 'flash' as const, open: true },
-    { label: 'BHD 2-3', lamp: 0x37d36b, mode: 'steady' as const, open: false },
+    { label: 'DOOR C1 C2', lamp: 0xffa31a, mode: 'flash' as const, open: true },
+    { label: 'DOOR C2 C3', lamp: 0x37d36b, mode: 'steady' as const, open: false },
     { label: 'BALLAST', lamp: 0x37d36b, mode: 'steady' as const, open: false },
     { label: 'VENT', lamp: 0x37d36b, mode: 'off' as const, open: false },
   ];
@@ -350,19 +351,18 @@ export function buildConsole(screens: ScreenSet): Console {
   printer.add(prModel);
 
   const paper = new PrinterPaper([
-    'HELIOS DEEP  STATION REPORT',
-    'DAY 01      03:47',
+    'HELIOS DEEP  MORNING REPORT',
+    'DAY 1                03:47',
     '----------------------------',
-    'C2 BALLAST  LEVEL 42 %  CONF',
-    'BHD 1-2     NOT CLOSED  CONF',
-    'P-202       TRIPPED     CONF',
-    'SG-104      STRAIN HI   PROB',
-    'C4 LAB      O2 20.3 %   CONF',
-    'HYDROPHONE  CONTACT     SENS',
-    '            FAULT?',
+    'C2 FLOODING        CONFIRMED',
+    'DOOR C1 C2 OPEN    CONFIRMED',
+    'PUMP 2 FAILED      CONFIRMED',
+    'HULL STRESS HIGH   LIKELY',
+    'NOISE ON HYDROPHONE',
+    '  CHECK SENSOR     UNSURE',
     '----------------------------',
-    'CREW ACCOUNTED  6 OF 6',
-    'RESCUE ETA  13 DAYS',
+    'CREW  6 OF 6 ACCOUNTED FOR',
+    'RESCUE IN 13 DAYS',
   ]);
   // Sheet path: out of the slot, up, then over the back.
   const path = new THREE.CatmullRomCurve3([
@@ -555,16 +555,16 @@ function checklist() {
   x.fillStyle = '#1d1d1d';
   x.font = `500 25px ${FONT.mono}`;
   const steps = [
-    '1  ACK ALARM AT OPS 1',
-    '2  CLOSE BHD 1-2',
+    '1  ACKNOWLEDGE THE ALARM',
+    '2  CLOSE DOOR C1 C2',
     '   LIFT GUARD. SWITCH DOWN.',
-    '3  CONFIRM P-201 RUNNING',
-    '4  IF P-202 TRIPPED',
+    '3  CHECK PUMP 1 IS ON',
+    '4  IF PUMP 2 FAILED',
     '   RESET AT BREAKER 7',
     '5  MUSTER CREW BY PHONE',
     '6  LOG TIME AND LEVEL',
     '',
-    'DO NOT OPEN BHD 1-2 UNTIL',
+    'DO NOT OPEN DOOR C1 C2 UNTIL',
     'C2 LEVEL BELOW 10 %',
   ];
   steps.forEach((s, i) => x.fillText(s, 30, 150 + i * 46));

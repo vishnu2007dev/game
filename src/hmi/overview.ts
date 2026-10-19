@@ -1,34 +1,39 @@
 import * as THREE from 'three';
 import { HMI, HMI_FONT, clock } from './palette';
 
+type Level = 'normal' | 'warn' | 'alarm';
+
 interface Compartment {
   id: string;
   name: string;
   x: number;
   w: number;
-  data: [string, string][];
+  status: string;
+  level: Level;
+  crew: number;
 }
 
 const COMPARTMENTS: Compartment[] = [
-  { id: 'C1', name: 'COMMAND', x: 0, w: 0.17, data: [['P', '1.01 BAR'], ['O2', '20.6 %'], ['CREW', '1']] },
-  { id: 'C2', name: 'BALLAST', x: 0.17, w: 0.15, data: [['P', '1.38 BAR'], ['LVL', '42 %'], ['CREW', '0']] },
-  { id: 'C3', name: 'POWER', x: 0.32, w: 0.17, data: [['P', '1.02 BAR'], ['BUS A', '61 %'], ['CREW', '1']] },
-  { id: 'C4', name: 'LAB', x: 0.49, w: 0.17, data: [['P', '1.01 BAR'], ['O2', '20.3 %'], ['CREW', '2']] },
-  { id: 'C5', name: 'QUARTERS', x: 0.66, w: 0.17, data: [['P', '1.01 BAR'], ['O2', '20.5 %'], ['CREW', '1']] },
-  { id: 'C6', name: 'DIVE', x: 0.83, w: 0.17, data: [['P', '1.04 BAR'], ['O2', '20.9 %'], ['CREW', '1']] },
+  { id: 'C1', name: 'COMMAND', x: 0, w: 0.17, status: 'NORMAL', level: 'normal', crew: 1 },
+  { id: 'C2', name: 'BALLAST', x: 0.17, w: 0.16, status: 'FLOODING', level: 'alarm', crew: 0 },
+  { id: 'C3', name: 'POWER', x: 0.33, w: 0.17, status: 'POWER 61%', level: 'warn', crew: 1 },
+  { id: 'C4', name: 'LAB', x: 0.5, w: 0.165, status: 'NORMAL', level: 'normal', crew: 2 },
+  { id: 'C5', name: 'QUARTERS', x: 0.665, w: 0.17, status: 'NORMAL', level: 'normal', crew: 1 },
+  { id: 'C6', name: 'DIVE BAY', x: 0.835, w: 0.165, status: 'NORMAL', level: 'normal', crew: 1 },
 ];
 
 const ALARMS = [
-  { time: '03:47:09', pri: 'P1', tag: 'LAH-201', text: 'C2 BALLAST FLOOD LEVEL HIGH HIGH', state: 'UNACK', color: HMI.alarm },
-  { time: '03:46:58', pri: 'P2', tag: 'ZT-112', text: 'BHD DOOR 1-2 NOT CLOSED', state: 'UNACK', color: HMI.warn },
-  { time: '03:46:51', pri: 'P2', tag: 'SG-104', text: 'HULL STRAIN GAUGE 4 DEVIATION', state: 'ACK', color: HMI.warn },
-  { time: '03:41:12', pri: 'P3', tag: 'FT-330', text: 'CO2 SCRUBBER FLOW LOW', state: 'ACK', color: HMI.warn },
+  { time: '03:47', level: 'HIGH', text: 'C2 BALLAST ROOM IS FLOODING', state: 'NEW', color: HMI.alarm },
+  { time: '03:46', level: 'MED', text: 'DOOR BETWEEN C1 AND C2 IS OPEN', state: 'NEW', color: HMI.warn },
+  { time: '03:46', level: 'MED', text: 'HULL STRESS ABOVE NORMAL', state: 'SEEN', color: HMI.warn },
 ];
 
+const colourOf = (l: Level) => (l === 'alarm' ? HMI.alarm : l === 'warn' ? HMI.warn : HMI.text);
+
 /**
- * Station overview screen: a mimic diagram of the six compartments,
- * the ballast main, and the alarm summary. Drawn to a canvas that is
- * used as the emissive texture of the centre monitor.
+ * Station overview: a cutaway of the six rooms, the ballast pipe and the
+ * alarm list. Wording is plain so a first-time player understands it,
+ * while the layout follows real control room screens.
  */
 export class OverviewScreen {
   readonly canvas = document.createElement('canvas');
@@ -47,207 +52,188 @@ export class OverviewScreen {
   }
 
   draw(t: number) {
-    const { ctx, w, h } = this;
+    const { ctx, w } = this;
     const flash = Math.floor(t * 2) % 2 === 0;
 
     ctx.fillStyle = HMI.bg;
-    ctx.fillRect(0, 0, w, h);
+    ctx.fillRect(0, 0, w, this.h);
 
     // Title bar.
     ctx.fillStyle = HMI.bgDeep;
-    ctx.fillRect(0, 0, w, 74);
-    ctx.fillStyle = HMI.white;
-    ctx.font = `600 40px ${HMI_FONT.label}`;
+    ctx.fillRect(0, 0, w, 80);
     ctx.textBaseline = 'middle';
-    ctx.fillText('HELIOS DEEP', 30, 38);
+    ctx.font = `600 46px ${HMI_FONT.label}`;
+    ctx.fillStyle = HMI.white;
+    ctx.fillText('HELIOS DEEP', 32, 41);
     ctx.fillStyle = HMI.textDim;
-    ctx.fillText('STATION OVERVIEW', 230, 38);
-    ctx.font = `500 30px ${HMI_FONT.mono}`;
+    ctx.fillText('STATION MAP', 260, 41);
     ctx.textAlign = 'right';
+    ctx.font = `500 34px ${HMI_FONT.mono}`;
     ctx.fillStyle = HMI.text;
-    ctx.fillText(`DEPTH 3012 M    DAY 01    ${clock(t)}`, w - 30, 38);
+    ctx.fillText(`DAY 1   ${clock(t)}`, w - 32, 41);
     ctx.textAlign = 'left';
 
-    // Unacknowledged P1 alarm banner flashes until acknowledged.
+    // The alarm banner flashes until the operator acknowledges it.
     ctx.fillStyle = flash ? HMI.alarm : '#5a1714';
-    ctx.fillRect(0, 74, w, 78);
-    ctx.fillStyle = flash ? '#ffffff' : '#e9b9b5';
-    ctx.font = `600 44px ${HMI_FONT.label}`;
-    ctx.fillText('P1   FLOOD ALARM   C2 BALLAST   LEVEL HIGH HIGH', 30, 114);
+    ctx.fillRect(0, 80, w, 100);
+    ctx.fillStyle = flash ? '#ffffff' : '#f0c4c0';
+    ctx.font = `700 60px ${HMI_FONT.label}`;
+    ctx.fillText('FLOOD ALARM: C2 BALLAST ROOM', 32, 132);
     ctx.textAlign = 'right';
-    ctx.font = `600 32px ${HMI_FONT.mono}`;
-    ctx.fillText('UNACK', w - 30, 114);
+    ctx.font = `600 34px ${HMI_FONT.mono}`;
+    ctx.fillText('NEW', w - 32, 132);
     ctx.textAlign = 'left';
 
-    this.drawMimic(t, flash);
-    this.drawAlarmList(flash);
+    this.drawMap(t, flash);
+    this.drawAlarms(flash);
   }
 
-  private drawMimic(t: number, flash: boolean) {
+  private drawMap(t: number, flash: boolean) {
     const { ctx, w } = this;
-    const left = 60;
-    const right = w - 60;
-    const top = 210;
-    const bottom = 560;
+    const left = 40;
+    const right = w - 40;
+    const top = 222;
+    const bottom = 556;
     const hullW = right - left;
-    const r = 90;
+    const r = 80;
 
-    // Sea outside the hull.
-    ctx.fillStyle = HMI.textDim;
-    ctx.font = `500 26px ${HMI_FONT.mono}`;
-    ctx.fillText('SEA 301.6 BAR   4.1 C', left, 194);
-    ctx.textAlign = 'right';
-    ctx.fillText('HULL TRIM -0.4 DEG', right, 194);
-    ctx.textAlign = 'left';
-
-    // Compartment water fill is drawn inside the hull clip.
-    ctx.save();
-    roundRect(ctx, left, top, hullW, bottom - top, r);
-    ctx.clip();
+    // Flood water inside C2, clipped to the hull.
     const c2 = COMPARTMENTS[1];
     const cx = left + c2.x * hullW;
     const cw = c2.w * hullW;
     const level = 0.42 + Math.sin(t * 0.7) * 0.004;
     const waterTop = bottom - (bottom - top) * level;
+    const wave = (x: number) => waterTop + Math.sin(x * 0.05 + t * 3) * 3;
+    ctx.save();
+    roundRect(ctx, left, top, hullW, bottom - top, r);
+    ctx.clip();
     ctx.fillStyle = HMI.water;
     ctx.beginPath();
     ctx.moveTo(cx, bottom);
-    for (let x = 0; x <= cw; x += 8) {
-      ctx.lineTo(cx + x, waterTop + Math.sin(x * 0.05 + t * 3) * 3);
-    }
+    for (let x = 0; x <= cw; x += 8) ctx.lineTo(cx + x, wave(x));
     ctx.lineTo(cx + cw, bottom);
     ctx.closePath();
     ctx.fill();
     ctx.strokeStyle = HMI.waterHi;
     ctx.lineWidth = 3;
     ctx.beginPath();
-    for (let x = 0; x <= cw; x += 8) {
-      const y = waterTop + Math.sin(x * 0.05 + t * 3) * 3;
-      if (x === 0) ctx.moveTo(cx + x, y);
-      else ctx.lineTo(cx + x, y);
-    }
+    for (let x = 0; x <= cw; x += 8) (x ? ctx.lineTo : ctx.moveTo).call(ctx, cx + x, wave(x));
     ctx.stroke();
     ctx.restore();
 
-    // Hull outline.
     ctx.strokeStyle = HMI.line;
     ctx.lineWidth = 5;
     roundRect(ctx, left, top, hullW, bottom - top, r);
     ctx.stroke();
 
-    // Bulkheads and the door state on each one.
     COMPARTMENTS.forEach((c, i) => {
       const x = left + c.x * hullW;
       if (i > 0) {
+        // Bulkhead wall with its door near the floor.
         ctx.strokeStyle = HMI.line;
         ctx.lineWidth = 5;
         ctx.beginPath();
         ctx.moveTo(x, top);
-        ctx.lineTo(x, bottom - 70);
-        ctx.moveTo(x, bottom - 18);
+        ctx.lineTo(x, bottom - 78);
+        ctx.moveTo(x, bottom - 16);
         ctx.lineTo(x, bottom);
         ctx.stroke();
-        // Door between compartments: a gap is open, a bar is closed.
-        const openDoor = i === 1;
-        if (openDoor) {
+        if (i === 1) {
+          // The open door: an outlined gap, flashing amber.
           ctx.strokeStyle = flash ? HMI.warn : HMI.lineDim;
           ctx.lineWidth = 4;
-          ctx.strokeRect(x - 12, bottom - 70, 24, 52);
-          ctx.fillStyle = HMI.warn;
-          ctx.font = `600 22px ${HMI_FONT.mono}`;
-          ctx.textAlign = 'center';
-          ctx.fillText('OPEN', x, bottom - 88);
-          ctx.textAlign = 'left';
+          ctx.strokeRect(x - 13, bottom - 78, 26, 62);
         } else {
           ctx.fillStyle = HMI.line;
-          ctx.fillRect(x - 6, bottom - 70, 12, 52);
+          ctx.fillRect(x - 6, bottom - 78, 12, 62);
         }
       }
-
-      const isFlood = c.id === 'C2';
-      const tx = x + (i === 0 ? 56 : 20);
-      ctx.fillStyle = isFlood ? HMI.white : HMI.text;
-      ctx.font = `600 36px ${HMI_FONT.label}`;
-      ctx.fillText(`${c.id}  ${c.name}`, tx, top + 46);
-      ctx.font = `500 23px ${HMI_FONT.mono}`;
-      c.data.forEach(([k, v], j) => {
-        const alarmed = isFlood && k === 'LVL';
-        ctx.fillStyle = alarmed ? HMI.alarm : HMI.textDim;
-        ctx.fillText(k, tx, top + 94 + j * 36);
-        ctx.fillStyle = alarmed ? HMI.alarm : HMI.text;
-        ctx.fillText(v, tx + 70, top + 94 + j * 36);
-      });
+      const tx = x + (i === 0 ? 52 : 18);
+      ctx.fillStyle = c.level === 'normal' ? HMI.text : HMI.white;
+      ctx.font = `600 40px ${HMI_FONT.label}`;
+      ctx.fillText(`${c.id} ${c.name}`, tx, top + 48);
+      ctx.font = `600 32px ${HMI_FONT.mono}`;
+      ctx.fillStyle = colourOf(c.level);
+      ctx.fillText(c.status, tx, top + 104);
+      ctx.font = `500 28px ${HMI_FONT.mono}`;
+      ctx.fillStyle = HMI.textDim;
+      ctx.fillText(c.crew === 1 ? '1 PERSON' : `${c.crew} PEOPLE`, tx, top + 148);
     });
 
-    // Alarmed compartment outline.
-    const c2x = left + COMPARTMENTS[1].x * hullW;
-    const c2w = COMPARTMENTS[1].w * hullW;
+    // Label for the open door, below the hull so it never hits the water.
+    const doorX = left + COMPARTMENTS[1].x * hullW;
+    ctx.fillStyle = HMI.warn;
+    ctx.font = `600 28px ${HMI_FONT.mono}`;
+    ctx.fillText('DOOR OPEN', doorX - 70, bottom + 38);
+
     if (flash) {
       ctx.strokeStyle = HMI.alarm;
       ctx.lineWidth = 7;
-      ctx.strokeRect(c2x + 6, top + 6, c2w - 12, bottom - top - 12);
+      ctx.strokeRect(cx + 6, top + 6, cw - 12, bottom - top - 12);
     }
-    // Level transmitter tag beside the water.
-    ctx.fillStyle = HMI.alarm;
-    ctx.font = `600 24px ${HMI_FONT.mono}`;
-    ctx.fillText('LAH-201', c2x + 20, bottom - (bottom - top) * 0.42 - 16);
+    ctx.fillStyle = HMI.white;
+    ctx.font = `600 30px ${HMI_FONT.mono}`;
+    ctx.fillText('WATER 42%', cx + 18, waterTop + 44);
 
-    // Ballast main with pumps and valves.
-    const py = 646;
+    // Ballast pipe with its two pumps and two valves.
+    const py = 664;
     ctx.strokeStyle = HMI.line;
     ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.moveTo(left + 40, py);
+    ctx.moveTo(left + 300, py);
     ctx.lineTo(right - 40, py);
     ctx.stroke();
-    // Risers from compartments to the main.
-    for (const fx of [0.245, 0.405, 0.575]) {
-      ctx.beginPath();
-      ctx.moveTo(left + fx * hullW, bottom);
-      ctx.lineTo(left + fx * hullW, py);
-      ctx.stroke();
-    }
-    pump(ctx, left + 0.2 * hullW, py, 'P-201', 'RUN', HMI.text, t);
-    pump(ctx, left + 0.35 * hullW, py, 'P-202', 'TRIP', HMI.warn, 0);
-    valve(ctx, left + 0.5 * hullW, py, 'XV-210', 'OPEN', HMI.text);
-    valve(ctx, left + 0.68 * hullW, py, 'XV-211', 'CLSD', HMI.textDim);
+    ctx.beginPath();
+    ctx.moveTo(cx + cw * 0.5, bottom);
+    ctx.lineTo(cx + cw * 0.5, py);
+    ctx.stroke();
     ctx.fillStyle = HMI.textDim;
-    ctx.font = `500 24px ${HMI_FONT.mono}`;
-    ctx.fillText('BALLAST MAIN', right - 230, py - 18);
-    ctx.fillText('TO SEA', right - 120, py + 40);
+    ctx.font = `500 28px ${HMI_FONT.mono}`;
+    ctx.fillText('PUMPS', left + 20, py + 10);
+    pump(ctx, left + 0.38 * hullW, py, 'PUMP 1', 'ON', HMI.text, t);
+    pump(ctx, left + 0.52 * hullW, py, 'PUMP 2', 'FAILED', HMI.warn, 0);
+    valve(ctx, left + 0.68 * hullW, py, 'VALVE', 'OPEN', HMI.text);
+    ctx.fillStyle = HMI.textDim;
+    ctx.textAlign = 'right';
+    ctx.fillText('TO SEA', right - 40, py - 22);
+    ctx.textAlign = 'left';
   }
 
-  private drawAlarmList(flash: boolean) {
+  private drawAlarms(flash: boolean) {
     const { ctx, w, h } = this;
-    const top = 776;
+    const top = 770;
     ctx.fillStyle = HMI.bgDeep;
     ctx.fillRect(0, top, w, h - top);
     ctx.fillStyle = HMI.textDim;
-    ctx.font = `500 24px ${HMI_FONT.mono}`;
-    const cols = [30, 200, 280, 450, w - 150];
-    ['TIME', 'PRI', 'TAG', 'DESCRIPTION', 'STATE'].forEach((label, i) => ctx.fillText(label, cols[i], top + 30));
+    ctx.font = `500 26px ${HMI_FONT.mono}`;
+    const cols = [32, 170, 330, w - 120];
+    ['TIME', 'LEVEL', 'WHAT HAPPENED'].forEach((label, i) => ctx.fillText(label, cols[i], top + 32));
+    ctx.textAlign = 'right';
+    ctx.fillText('STATUS', w - 32, top + 32);
+    ctx.textAlign = 'left';
     ctx.strokeStyle = HMI.lineDim;
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(20, top + 50);
-    ctx.lineTo(w - 20, top + 50);
+    ctx.moveTo(20, top + 56);
+    ctx.lineTo(w - 20, top + 56);
     ctx.stroke();
-    ctx.font = `500 28px ${HMI_FONT.mono}`;
+    ctx.font = `500 34px ${HMI_FONT.mono}`;
     ALARMS.forEach((a, i) => {
-      const y = top + 86 + i * 46;
-      const unack = a.state === 'UNACK';
-      // Priority marker: a filled shape so colour is never the only cue.
-      ctx.fillStyle = unack && !flash ? HMI.bgDeep : a.color;
-      ctx.fillRect(cols[1] - 22, y - 12, 14, 24);
-      ctx.fillStyle = unack ? HMI.white : HMI.text;
+      const y = top + 98 + i * 52;
+      const fresh = a.state === 'NEW';
+      // A filled marker, so colour is never the only cue.
+      ctx.fillStyle = fresh && !flash ? HMI.bgDeep : a.color;
+      ctx.fillRect(cols[1] - 26, y - 14, 14, 28);
+      ctx.fillStyle = fresh ? HMI.white : HMI.text;
       ctx.fillText(a.time, cols[0], y);
       ctx.fillStyle = a.color;
-      ctx.fillText(a.pri, cols[1], y);
-      ctx.fillStyle = unack ? HMI.white : HMI.text;
-      ctx.fillText(a.tag, cols[2], y);
-      ctx.fillText(a.text, cols[3], y);
-      ctx.fillStyle = unack ? a.color : HMI.textDim;
-      ctx.fillText(a.state, cols[4], y);
+      ctx.fillText(a.level, cols[1], y);
+      ctx.fillStyle = fresh ? HMI.white : HMI.text;
+      ctx.fillText(a.text, cols[2], y);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = fresh ? a.color : HMI.textDim;
+      ctx.fillText(a.state, w - 32, y);
+      ctx.textAlign = 'left';
     });
   }
 }
@@ -262,51 +248,51 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath();
 }
 
-/** P&ID pump symbol: a circle with a discharge triangle. */
+/** Pump symbol: a circle with a discharge triangle that turns when on. */
 function pump(ctx: CanvasRenderingContext2D, x: number, y: number, tag: string, state: string, color: string, t: number) {
   ctx.fillStyle = HMI.bg;
   ctx.strokeStyle = color;
   ctx.lineWidth = 4;
   ctx.beginPath();
-  ctx.arc(x, y, 26, 0, Math.PI * 2);
+  ctx.arc(x, y, 28, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
   ctx.save();
   ctx.translate(x, y);
-  // A running pump shows a slowly turning impeller mark.
   ctx.rotate(t * 2.5);
   ctx.beginPath();
-  ctx.moveTo(-14, 10);
-  ctx.lineTo(14, 10);
-  ctx.lineTo(0, -16);
+  ctx.moveTo(-15, 11);
+  ctx.lineTo(15, 11);
+  ctx.lineTo(0, -17);
   ctx.closePath();
   ctx.stroke();
   ctx.restore();
-  ctx.fillStyle = color;
-  ctx.font = `600 24px ${HMI_FONT.mono}`;
-  ctx.textAlign = 'center';
-  ctx.fillText(tag, x, y + 54);
-  ctx.fillText(state, x, y + 80);
-  ctx.textAlign = 'left';
+  label(ctx, x, y, tag, state, color);
 }
 
-/** P&ID gate valve symbol: two triangles tip to tip. */
+/** Valve symbol: two triangles tip to tip. */
 function valve(ctx: CanvasRenderingContext2D, x: number, y: number, tag: string, state: string, color: string) {
-  ctx.fillStyle = state === 'OPEN' ? HMI.bg : HMI.lineDim;
+  ctx.fillStyle = HMI.bg;
   ctx.strokeStyle = color;
   ctx.lineWidth = 4;
   ctx.beginPath();
-  ctx.moveTo(x - 24, y - 16);
-  ctx.lineTo(x + 24, y + 16);
-  ctx.lineTo(x + 24, y - 16);
-  ctx.lineTo(x - 24, y + 16);
+  ctx.moveTo(x - 26, y - 17);
+  ctx.lineTo(x + 26, y + 17);
+  ctx.lineTo(x + 26, y - 17);
+  ctx.lineTo(x - 26, y + 17);
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
-  ctx.fillStyle = color;
-  ctx.font = `600 24px ${HMI_FONT.mono}`;
+  label(ctx, x, y, tag, state, color);
+}
+
+function label(ctx: CanvasRenderingContext2D, x: number, y: number, tag: string, state: string, color: string) {
   ctx.textAlign = 'center';
-  ctx.fillText(tag, x, y + 54);
-  ctx.fillText(state, x, y + 80);
+  ctx.font = `500 26px ${HMI_FONT.mono}`;
+  ctx.fillStyle = HMI.textDim;
+  ctx.fillText(tag, x, y + 56);
+  ctx.font = `600 28px ${HMI_FONT.mono}`;
+  ctx.fillStyle = color;
+  ctx.fillText(state, x, y + 86);
   ctx.textAlign = 'left';
 }
