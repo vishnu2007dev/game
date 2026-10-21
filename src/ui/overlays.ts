@@ -6,9 +6,9 @@ import { audio } from '../audio/audio';
  * square controls, no floating cards.
  */
 
-const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+export const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string) {
+export function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string) {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
   if (text !== undefined) e.textContent = text;
@@ -16,7 +16,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
 }
 
 /** Type text into an element. A click or key on `skipOn` finishes it at once. */
-async function type(target: HTMLElement, text: string, skipOn: HTMLElement, cps = 60) {
+export async function type(target: HTMLElement, text: string, skipOn: HTMLElement, cps = 60) {
   let skip = false;
   const onSkip = () => (skip = true);
   skipOn.addEventListener('pointerdown', onSkip);
@@ -35,7 +35,7 @@ async function type(target: HTMLElement, text: string, skipOn: HTMLElement, cps 
 }
 
 /** Resolve on a click of one of `buttons`, or its number key, or Enter for a single button. */
-function choose(buttons: HTMLButtonElement[]): Promise<number> {
+export function choose(buttons: HTMLButtonElement[]): Promise<number> {
   return new Promise((resolve) => {
     const done = (i: number) => {
       removeEventListener('keydown', onKey);
@@ -166,19 +166,23 @@ export class Overlays {
   }
 
   /** Holding screen until the station and crew arrive in the next build. */
-  async comingNext(): Promise<'replay'> {
+  /** End of what this preview build can play. */
+  async comingNext(line: string, small: string, action = 'Play again'): Promise<'replay'> {
     const t = el('section', 'ov-title');
     t.innerHTML = `
       <div class="ov-title-inner">
         <p class="ov-kicker">Next build</p>
-        <p class="ov-title-line">The station, room by room. Then the crew.</p>
-        <p class="ov-small">This preview is the intro only.</p>
+        <p class="ov-title-line"></p>
+        <p class="ov-small"></p>
         <div class="ov-title-actions">
-          <button type="button" class="ov-btn ov-btn-primary" id="next-replay">Replay intro</button>
+          <button type="button" class="ov-btn ov-btn-primary" id="next-replay"></button>
         </div>
       </div>`;
-    this.root.appendChild(t);
+    t.querySelector('.ov-title-line')!.textContent = line;
+    t.querySelector('.ov-small')!.textContent = small;
     const b = t.querySelector<HTMLButtonElement>('#next-replay')!;
+    b.textContent = action;
+    this.root.appendChild(t);
     await choose([b]);
     t.remove();
     return 'replay';

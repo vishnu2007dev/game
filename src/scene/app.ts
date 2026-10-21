@@ -7,7 +7,8 @@ import { Tweens, ease } from './tween';
 import { flapTexture } from './decals';
 import { audio } from '../audio/audio';
 import { Fx } from './fx';
-import { buildStation, type CrewDef, type RoomDef } from './station';
+import { buildStation, type CrewDef, type RoomDef, type Hotspot } from './station';
+import type { DoorKey } from '../engine/crisis';
 import { glitch, dead } from '../hmi/glitch';
 import { buildPost } from './post';
 import { detectTier, prefersReducedMotion } from './quality';
@@ -65,6 +66,12 @@ export interface Station {
   showCrew(id: string): void;
   /** Where a room's centre is on screen right now, in CSS pixels. */
   screenPoint(roomId: string): { x: number; y: number; visible: boolean };
+  /** Same, for a hotspot marker. */
+  hotspotPoint(id: string): { x: number; y: number; visible: boolean };
+  setDoor(id: DoorKey, closed: boolean): void;
+  setHotspots(spots: Hotspot[]): void;
+  /** Live suit camera on one crew member, drawn into the element's box; null turns it off. */
+  faceCam(id: string | null, frame?: HTMLElement): void;
   /** Switch to the detailed control room scene. */
   showControlRoom(): void;
   /** Events from the station view, for the interface layer. */
@@ -78,7 +85,9 @@ export type StationEvent =
   | { type: 'room'; room: RoomDef }
   | { type: 'crew'; crew: CrewDef }
   | { type: 'control' }
-  | { type: 'read' };
+  | { type: 'read' }
+  | { type: 'door'; id: DoorKey }
+  | { type: 'hotspot'; id: string };
 
 /** Camera framing for landscape and portrait screens. */
 function frame(camera: THREE.PerspectiveCamera, aspect: number) {
@@ -187,6 +196,11 @@ export function startScene(root: HTMLElement): Station {
   const stationPick = (x: number, y: number) => {
     const r = canvas.getBoundingClientRect();
     stationRay.setFromCamera(new THREE.Vector2(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1), camera);
+    const marker = stationRay.intersectObjects([...world.hotspotHits, ...world.doorHits], false)[0];
+    if (marker) {
+      const [kind, id] = marker.object.name.split(':');
+      return kind === 'door' ? { door: id as DoorKey } : { spot: id };
+    }
     const crewHit = stationRay.intersectObjects(world.crew.map((c) => c.member.hit), false)[0];
     if (crewHit) return { crew: world.crew.find((c) => c.member.hit === crewHit.object)!.def };
     const roomHit = stationRay.intersectObjects(world.rooms.map((q) => q.hit), false)[0];
@@ -195,6 +209,8 @@ export function startScene(root: HTMLElement): Station {
   };
   const stationTap = (x: number, y: number) => {
     const hit = stationPick(x, y);
+    if (hit?.door) return station.onStation({ type: 'door', id: hit.door });
+    if (hit?.spot) return station.onStation({ type: 'hotspot', id: hit.spot });
     if (hit?.crew) {
       station.showCrew(hit.crew.id);
       return;
@@ -217,6 +233,42 @@ export function startScene(root: HTMLElement): Station {
   const panelTarget = focus.targets[3];
   const tweens = new Tweens();
   let station: Station;
+  // Suit camera for calls: a second small render of the station scene,
+  // straight to the screen inside the call panel's frame, no post.
+  let cam: { id: string; frame: HTMLElement } | null = null;
+  const faceCamera = new THREE.PerspectiveCamera(32, 4 / 3, 0.05, 30);
+  const renderFaceCam = () => {
+    if (!cam) return;
+    const c = world.crew.find((q) => q.def.id === cam!.id);
+    const r = cam.frame.getBoundingClientRect();
+    if (!c || r.width < 2) return;
+    const p = c.member.root.position;
+    const yaw = c.member.root.rotation.y;
+    const head = new THREE.Vector3(p.x, p.y + 1.62, p.z);
+    faceCamera.position.set(head.x + Math.sin(yaw) * 0.85, head.y + 0.04, head.z + Math.cos(yaw) * 0.85);
+    faceCamera.lookAt(head.x, head.y - 0.06, head.z);
+    faceCamera.aspect = r.width / r.height;
+    faceCamera.updateProjectionMatrix();
+    const y = innerHeight - r.bottom;
+    renderer.setScissorTest(true);
+    renderer.setScissor(r.left, y, r.width, r.height);
+    renderer.setViewport(r.left, y, r.width, r.height);
+    renderer.toneMapping = THREE.AgXToneMapping;
+    renderer.render(world.scene, faceCamera);
+    renderer.toneMapping = THREE.NoToneMapping;
+    renderer.setScissorTest(false);
+    renderer.setViewport(0, 0, innerWidth, innerHeight);
+  };
+  /** A world point in CSS pixels, for interface markers. */
+  const project = (at: THREE.Vector3) => {
+    const p = at.clone().project(camera);
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: rect.left + ((p.x + 1) / 2) * rect.width,
+      y: rect.top + ((1 - p.y) / 2) * rect.height,
+      visible: view === 'station' && p.z < 1,
+    };
+  };
 
   // Switch handling. The first click lifts the guard, the second throws
   // the switch, a third resets it. Hit boxes are oversized for thumbs.
@@ -483,15 +535,17 @@ export function startScene(root: HTMLElement): Station {
       world.hold(id);
       station.onStation({ type: 'crew', crew: c.def });
     },
+    setDoor: (id, closed) => world.setDoor(id, closed),
+    faceCam(id, frame) {
+      cam = id && frame ? { id, frame } : null;
+      world.hold(id ?? stationCrew);
+    },
+    setHotspots: (spots) => world.setHotspots(spots),
+    hotspotPoint(id) {
+      return project(world.hotspotAt(id) ?? new THREE.Vector3(0, -100, 0));
+    },
     screenPoint(roomId) {
-      const r = world.rooms.find((q) => q.id === roomId)!;
-      const p = r.centre.clone().project(camera);
-      const rect = canvas.getBoundingClientRect();
-      return {
-        x: rect.left + ((p.x + 1) / 2) * rect.width,
-        y: rect.top + ((1 - p.y) / 2) * rect.height,
-        visible: view === 'station' && p.z < 1,
-      };
+      return project(world.rooms.find((q) => q.id === roomId)!.centre);
     },
     showControlRoom() {
       stationCrew = null;
@@ -536,6 +590,8 @@ export function startScene(root: HTMLElement): Station {
     rest.pos.copy(shot.pos).add(new THREE.Vector3(eased.x * 0.035 * sway, -eased.y * 0.02 * sway, 0));
     rest.look.copy(shot.look).add(new THREE.Vector3(eased.x * 0.01 * sway, -eased.y * 0.006 * sway, 0));
     if (view === 'station') {
+      night += (nightTarget - night) * Math.min(1, dt * 1.5);
+      world.setDim(night);
       world.update(t, dt);
       const aim = stationCrew
         ? world.crewPose(stationCrew, camera.aspect)
@@ -569,6 +625,7 @@ export function startScene(root: HTMLElement): Station {
         cctv.texture.needsUpdate = true;
       }
       composer.render();
+      renderFaceCam();
       if (frames === 3) window.__READY = true;
       return;
     }

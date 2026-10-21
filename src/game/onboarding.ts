@@ -53,6 +53,6 @@ export async function tutorial(st: Station, hud: StationHud, roster: Roster, coa
     }
     await wait(500);
   }
-  await Promise.race([coach.say('Ready', 'That is the station. Day 1 comes in the next update: calls, doors and the first shift.', null, 'Done'), skipped]);
+  await Promise.race([coach.say('Ready', 'That is the station. Your first shift starts now.', null, 'Start Day 1'), skipped]);
   coach.hide();
 }

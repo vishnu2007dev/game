@@ -5,6 +5,7 @@ import { projectUV, shadows } from './util';
 import { printedText, FONT } from './decals';
 import { wallLining, treadPlate, ceilingTile, sectionHatch, hazardStripes, panelMaterial, occlusionFade } from './panels';
 import { CrewMember, loadCrewAssets, type Clip, type CrewLook } from './crew';
+import type { DoorKey } from '../engine/crisis';
 
 // Station layout in metres. The camera looks from +Z at a cutaway: the
 // near half of the pressure hull is sliced off at z = 0, so both decks
@@ -127,7 +128,31 @@ export interface Station {
   crewPose(id: string, aspect: number): { pos: THREE.Vector3; look: THREE.Vector3; fov: number };
   /** Stop someone where they are and have them turn to the camera and talk; null lets them go back to work. */
   hold(id: string | null): void;
+  /** Watertight doors: shut or open, animated. */
+  setDoor(id: DoorKey, closed: boolean): void;
+  /** Tap targets for the doors, named door:<id>. */
+  doorHits: THREE.Object3D[];
+  /** Pulsing markers on things the player can work on, named spot:<id>. */
+  setHotspots(spots: Hotspot[]): void;
+  hotspotHits: THREE.Object3D[];
+  /** Where a hotspot sits, for the tutorial marker. */
+  hotspotAt(id: string): THREE.Vector3 | null;
+  /** Night lighting: 0 is the day shift, 1 is lights down to a fifth. */
+  setDim(k: number): void;
 }
+
+export interface Hotspot {
+  id: string;
+  at: THREE.Vector3;
+}
+
+/** Named places on props where tasks happen. */
+export const SPOTS = {
+  valve: new THREE.Vector3(-WALL_X - 0.32, 1.25, -2.2),
+  junction: new THREE.Vector3(-0.9, 1.95, -3.86),
+  keypad: new THREE.Vector3(4.55, 1.45, -3.9),
+  pipe: new THREE.Vector3(-6.4, 2.38, -3.25),
+};
 
 function hullShape(inset: number) {
   const { x0, x1, y0, y1, r } = HULL;
@@ -359,7 +384,9 @@ export function buildStation(screens: THREE.Texture[]): Station {
     }
   }
 
-  // Lights and labels per room.
+  // Lights and labels per room. Night dims every room light together.
+  const dimmable: { light: THREE.Light; base: number }[] = [];
+  const stripMats: THREE.MeshStandardMaterial[] = [];
   const rooms = ROOMS.map((r) => {
     const f = floorOf(r.deck);
     const ceil = r.deck === 'upper' ? UPPER.ceil : LOWER.ceil;
@@ -373,8 +400,11 @@ export function buildStation(screens: THREE.Texture[]): Station {
     const fill = new THREE.PointLight(r.light, 2.2, 7, 2);
     fill.position.set(cx, f + 1.4, -0.6);
     scene.add(fill);
+    dimmable.push({ light: area, base: area.intensity }, { light: fill, base: fill.intensity });
+    const strip = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: r.light, emissiveIntensity: 2.4 });
+    stripMats.push(strip);
     for (const z of [-2.55, -1.45]) {
-      scene.add(box(w - 1.8, 0.05, 0.32, new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: r.light, emissiveIntensity: 2.4 }), v(cx, ceil - 0.03, z), 0.01));
+      scene.add(box(w - 1.8, 0.05, 0.32, strip, v(cx, ceil - 0.03, z), 0.01));
       scene.add(box(w - 1.7, 0.03, 0.4, black, v(cx, ceil - 0.005, z), 0.01));
     }
     // Stencilled room name top left of the back wall, with a colour bar.
@@ -393,6 +423,8 @@ export function buildStation(screens: THREE.Texture[]): Station {
   });
 
   const props = furnish(scene, { enamel, black, steel, beige, hullPaint }, screens);
+  const doors = buildDoors(scene, black);
+  const hotspots = buildHotspots(scene);
   services(scene, { black, cut });
 
   // Outside: seabed, legs, ballast tanks, the docking trunk, the umbilical.
@@ -483,12 +515,23 @@ export function buildStation(screens: THREE.Texture[]): Station {
     crew,
     ready,
     crewPose,
+    setDoor: doors.set,
+    setDim(k) {
+      for (const d of dimmable) d.light.intensity = d.base * (1 - 0.8 * k);
+      for (const m of stripMats) m.emissiveIntensity = 2.4 * (1 - 0.85 * k);
+    },
+    doorHits: doors.hits,
+    setHotspots: hotspots.set,
+    hotspotHits: hotspots.hits,
+    hotspotAt: hotspots.at,
     hold(id) {
       for (const a of agents) a.hold(a.id === id);
     },
     update(t, dt) {
       snow.update(dt);
       props.update(t);
+      doors.update(dt);
+      hotspots.update(t);
       ext.update(t);
       for (const a of agents) a.update(t, dt);
       for (const c of crew) c.member.update(dt);
@@ -958,6 +1001,15 @@ function furnish(
   for (let y = 0.3; y < UPPER.floor + 0.9; y += 0.3) add(box(0.44, 0.03, 0.03, m.steel, v(ladderX, y, TRUNK.z0 + 0.25), 0.01));
   add(box(TRUNK.x1 - TRUNK.x0 + 0.1, 0.1, 0.08, safety, v(ladderX, U + 0.05, TRUNK.z1), 0.01));
 
+  // Junction box in Power and the moon pool gate keypad in the dive bay.
+  add(box(0.55, 0.45, 0.14, new THREE.MeshStandardMaterial({ color: 0x8c9196, roughness: 0.5, metalness: 0.4 }), v(SPOTS.junction.x, SPOTS.junction.y, zb + 0.07), 0.02));
+  add(box(0.06, 0.6, 0.06, m.black, v(SPOTS.junction.x + 0.18, SPOTS.junction.y + 0.5, zb + 0.06), 0.01));
+  add(box(0.06, 0.6, 0.06, m.black, v(SPOTS.junction.x - 0.18, SPOTS.junction.y + 0.5, zb + 0.06), 0.01));
+  add(box(0.24, 0.32, 0.05, m.black, v(SPOTS.keypad.x, SPOTS.keypad.y, zb + 0.03), 0.01));
+  const pad = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.2), new THREE.MeshStandardMaterial({ color: 0x0a0a0a, emissive: 0x2a7a50, emissiveIntensity: 0.6 }));
+  pad.position.set(SPOTS.keypad.x, SPOTS.keypad.y - 0.02, zb + 0.056);
+  scene.add(pad);
+
   // Signage.
   const yellowSign = { bg: '#d2a419', ink: '#141414' };
   const whiteSign = { bg: '#e2ded2', ink: '#1a1a1a' };
@@ -1069,6 +1121,122 @@ function outside(scene: THREE.Scene, m: { outerPaint: THREE.Material; black: THR
     update(t: number) {
       // The mast beacon flashes once every two seconds.
       beaconMat.emissiveIntensity = t % 2 < 0.15 ? 8 : 0.3;
+    },
+  };
+}
+
+/**
+ * Watertight doors. Each bulkhead door is a steel leaf that slides back
+ * into the bulkhead, with a status lamp on the cut face of the wall where
+ * the camera can see it: green open, red shut. The trunk hatch slides
+ * across the ladder opening between the decks.
+ */
+function buildDoors(scene: THREE.Scene, black: THREE.Material) {
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0x59616a, roughness: 0.45, metalness: 0.7 });
+  const stripe = new THREE.MeshStandardMaterial({ color: 0xc99a12, roughness: 0.5 });
+  const defs: { id: DoorKey; x: number; floor: number }[] = [
+    { id: 'command-lab', x: -WALL_X, floor: UPPER.floor },
+    { id: 'lab-quarters', x: WALL_X, floor: UPPER.floor },
+    { id: 'ballast-power', x: -WALL_X, floor: LOWER.floor },
+    { id: 'power-dive', x: WALL_X, floor: LOWER.floor },
+  ];
+  type Door = { leaf: THREE.Object3D; lamp: THREE.MeshStandardMaterial; open: number; target: number; axis: 'z' | 'x'; from: number; travel: number };
+  const doors = new Map<DoorKey, Door>();
+  const hits: THREE.Object3D[] = [];
+  const w = DOOR.z1 - DOOR.z0;
+  for (const d of defs) {
+    const leaf = new THREE.Group();
+    leaf.add(box(0.06, DOOR.h - 0.05, w - 0.04, leafMat, v(0, 0, 0), 0.02));
+    leaf.add(box(0.075, 0.06, w - 0.04, stripe, v(0, DOOR.h / 2 - 0.15, 0), 0.01));
+    for (const s of [-1, 1]) {
+      const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.018, 8, 24), black);
+      wheel.rotation.y = Math.PI / 2;
+      wheel.position.set(s * 0.05, 0.05, 0);
+      leaf.add(wheel);
+    }
+    const zc = (DOOR.z0 + DOOR.z1) / 2;
+    leaf.position.set(d.x, d.floor + DOOR.h / 2, zc - w);
+    scene.add(shadows(leaf));
+    // Status lamp on the cut face of the bulkhead, above the door line.
+    const plate = box(0.18, 0.26, 0.02, black, v(d.x, d.floor + 2.45, 0.012), 0.01);
+    scene.add(plate);
+    const lamp = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, emissive: 0x3cff6a, emissiveIntensity: 3 });
+    const bulb = new THREE.Mesh(new THREE.CircleGeometry(0.05, 16), lamp);
+    bulb.position.set(d.x, d.floor + 2.5, 0.024);
+    scene.add(bulb);
+    // Generous tap target around the lamp and the doorway.
+    const hit = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.8, 0.4), new THREE.MeshBasicMaterial({ visible: false }));
+    hit.position.set(d.x, d.floor + 2.45, 0.1);
+    hit.name = `door:${d.id}`;
+    scene.add(hit);
+    hits.push(hit);
+    doors.set(d.id, { leaf, lamp, open: 1, target: 1, axis: 'z', from: zc, travel: -w });
+  }
+  // Trunk hatch: a plate that slides across the ladder opening.
+  const hatch = box(TRUNK.x1 - TRUNK.x0, 0.06, TRUNK.z1 - TRUNK.z0, leafMat, v(0, 0, 0), 0.01);
+  const hx = (TRUNK.x0 + TRUNK.x1) / 2;
+  hatch.position.set(hx + (TRUNK.x1 - TRUNK.x0), UPPER.floor + 0.04, (TRUNK.z0 + TRUNK.z1) / 2);
+  scene.add(hatch);
+  doors.set('trunk', { leaf: hatch, lamp: new THREE.MeshStandardMaterial(), open: 1, target: 1, axis: 'x', from: hx, travel: TRUNK.x1 - TRUNK.x0 });
+  return {
+    hits,
+    set(id: DoorKey, closed: boolean) {
+      doors.get(id)!.target = closed ? 0 : 1;
+    },
+    update(dt: number) {
+      for (const d of doors.values()) {
+        if (Math.abs(d.open - d.target) < 0.001) continue;
+        // Heavy doors: a steady slide, not an ease.
+        d.open += Math.sign(d.target - d.open) * Math.min(Math.abs(d.target - d.open), dt * 0.9);
+        if (d.axis === 'z') d.leaf.position.z = d.from + d.travel * d.open;
+        else d.leaf.position.x = d.from + d.travel * d.open;
+        d.lamp.emissive.setHex(d.open > 0.02 ? 0x3cff6a : 0xff2a1a);
+      }
+    },
+  };
+}
+
+/** Pulsing amber markers on whatever the player can work on right now. */
+function buildHotspots(scene: THREE.Scene) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const ctx = c.getContext('2d')!;
+  ctx.strokeStyle = '#f2a900';
+  ctx.lineWidth = 7;
+  ctx.beginPath();
+  ctx.arc(64, 64, 50, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = '#f2a900';
+  ctx.beginPath();
+  ctx.arc(64, 64, 14, 0, Math.PI * 2);
+  ctx.fill();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true });
+  let live: { id: string; sprite: THREE.Sprite }[] = [];
+  const hits: THREE.Object3D[] = [];
+  return {
+    hits,
+    set(spots: Hotspot[]) {
+      for (const l of live) scene.remove(l.sprite);
+      hits.length = 0;
+      live = spots.map((s) => {
+        const sprite = new THREE.Sprite(mat);
+        sprite.position.copy(s.at);
+        sprite.renderOrder = 10;
+        sprite.name = `spot:${s.id}`;
+        scene.add(sprite);
+        hits.push(sprite);
+        return { id: s.id, sprite };
+      });
+    },
+    at(id: string) {
+      return live.find((l) => l.id === id)?.sprite.position.clone() ?? null;
+    },
+    update(t: number) {
+      const k = 0.32 + Math.sin(t * 4) * 0.05;
+      for (const l of live) l.sprite.scale.setScalar(k);
+      mat.opacity = 0.75 + Math.sin(t * 4) * 0.25;
     },
   };
 }

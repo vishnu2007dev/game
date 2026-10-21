@@ -195,8 +195,8 @@ export function buildConsole(screens: ScreenSet): Console {
     depthWrite: false,
   });
   const switchDefs = [
-    { label: 'DOOR C1 C2', lamp: 0xffa31a, mode: 'off' as const, open: false },
-    { label: 'DOOR C2 C3', lamp: 0x37d36b, mode: 'steady' as const, open: false },
+    { label: 'DOOR C2 C3', lamp: 0xffa31a, mode: 'off' as const, open: false },
+    { label: 'DOOR C3 C6', lamp: 0x37d36b, mode: 'steady' as const, open: false },
     { label: 'BALLAST', lamp: 0xffa31a, mode: 'off' as const, open: false },
     { label: 'VENT', lamp: 0x37d36b, mode: 'off' as const, open: false },
   ];

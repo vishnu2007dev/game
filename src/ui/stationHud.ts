@@ -14,7 +14,11 @@ export class StationHud {
   private card: HTMLElement;
   private fade: HTMLElement;
   private cardToken = 0;
+  /** A game hint that replaces the default room hints while it is set. */
+  private gameHint = '';
   onBack: () => void = () => {};
+  /** Set when calls are possible; the crew card then offers a Call button. */
+  onCall: ((id: string) => void) | null = null;
 
   constructor(root: HTMLElement) {
     this.el.className = 'sh';
@@ -51,7 +55,7 @@ export class StationHud {
   overview() {
     this.place.textContent = 'Station';
     this.blurb.textContent = 'Five crew. Six rooms. Two decks on the seabed.';
-    this.hint.textContent = `${innerWidth < innerHeight ? 'Drag to look along the station. ' : ''}Tap a room to look inside. Tap someone to meet them.`;
+    this.hint.textContent = this.gameHint || `${innerWidth < innerHeight ? 'Drag to look along the station. ' : ''}Tap a room to look inside. Tap someone to meet them.`;
     this.back.hidden = true;
     this.card.hidden = true;
   }
@@ -59,7 +63,7 @@ export class StationHud {
   room(r: RoomDef) {
     this.place.textContent = r.name;
     this.blurb.textContent = r.blurb;
-    this.hint.textContent = r.id === 'command' ? 'Tap the room again to sit at your desk.' : 'Tap someone to meet them.';
+    this.hint.textContent = r.id === 'command' ? 'Tap the room again to sit at your desk.' : this.gameHint || 'Tap someone to meet them.';
     this.back.textContent = 'Back to station';
     this.back.hidden = false;
     this.card.hidden = true;
@@ -112,6 +116,12 @@ export class StationHud {
     audio.play('confirm', { volume: 0.5 });
     const next = this.card.querySelector<HTMLButtonElement>('.sh-card-next')!;
     const skip = this.card.querySelector<HTMLButtonElement>('.sh-card-skip')!;
+    if (!opts.next && this.onCall) {
+      const onCall = this.onCall;
+      next.hidden = false;
+      next.textContent = `Call ${c.callsign.charAt(0)}${c.callsign.slice(1).toLowerCase()}`;
+      next.addEventListener('click', () => onCall(c.id), { once: true });
+    }
     if (!opts.next) return Promise.resolve('next');
     next.hidden = false;
     next.textContent = opts.next;
@@ -132,6 +142,11 @@ export class StationHud {
   hideCard() {
     this.cardToken++;
     this.card.hidden = true;
+  }
+
+  setHint(text: string) {
+    this.gameHint = text;
+    this.hint.textContent = text;
   }
 
   /** Header text for moments that are not a room, like the introductions. */

@@ -13,6 +13,7 @@ export class Roster {
   private toggle: HTMLButtonElement;
   private timer = 0;
   onPick: (id: string) => void = () => {};
+  onCall: (id: string) => void = () => {};
 
   constructor(root: HTMLElement, crew: CrewDef[]) {
     this.el.className = 'ro';
@@ -49,7 +50,17 @@ export class Roster {
         this.setOpen(false);
         this.onPick(c.id);
       });
-      li.appendChild(row);
+      const call = document.createElement('button');
+      call.type = 'button';
+      call.className = 'ro-call';
+      call.textContent = 'Call';
+      call.setAttribute('aria-label', `Call ${c.name}`);
+      call.addEventListener('click', () => {
+        this.setOpen(false);
+        this.onCall(c.id);
+      });
+      li.className = 'ro-item';
+      li.append(row, call);
       list.appendChild(li);
       this.rows.set(c.id, { row, bpm: row.querySelector('.ro-pulse b')!, base: 64 + ((i * 7) % 15) });
     });
