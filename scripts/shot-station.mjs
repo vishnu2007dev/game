@@ -11,7 +11,7 @@ const b = await chromium.launch({ executablePath: globSync('/opt/pw-browsers/chr
 const p = await b.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: w < 700 ? 2 : 1 });
 p.on('pageerror', (e) => console.log('PAGEERROR', e.message));
 p.on('console', (m) => m.type() === 'error' && console.log('CONSOLE', m.text()));
-await p.goto(`${base}?station`);
+await p.goto(`${base}?station&snap`);
 await p.waitForSelector('.sh:not([hidden])', { timeout: 240000 });
 await p.waitForTimeout(6000);
 await p.screenshot({ path: `screenshots/station/${tag}-overview.png`, timeout: 120000 });

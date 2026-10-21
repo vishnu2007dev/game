@@ -174,6 +174,7 @@ export function startScene(root: HTMLElement): Station {
   let view: 'room' | 'station' = 'room';
   let stationRoom: string | null = null;
   let panX = 0;
+  const snapCamera = new URLSearchParams(location.search).has('snap');
   const stationCam = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 34, started: false };
   const stationRay = new THREE.Raycaster();
   const stationPick = (x: number, y: number) => {
@@ -264,7 +265,7 @@ export function startScene(root: HTMLElement): Station {
   canvas.addEventListener('pointermove', (e) => {
     // Sideways drag pans the station overview on narrow screens.
     if (view !== 'station' || dragFrom === null || stationRoom || !(e.buttons & 1)) return;
-    panX = THREE.MathUtils.clamp(panX - ((e.clientX - dragFrom) / innerWidth) * 9, -4.5, 4.5);
+    panX = THREE.MathUtils.clamp(panX - ((e.clientX - dragFrom) / innerWidth) * 12, -6.5, 6.5);
     dragFrom = e.clientX;
   });
   canvas.addEventListener('pointerup', (e) => {
@@ -449,6 +450,8 @@ export function startScene(root: HTMLElement): Station {
     showStation(roomId = null) {
       view = 'station';
       stationRoom = roomId ?? null;
+      // Screenshot runs cut straight to the new framing.
+      if (snapCamera) stationCam.started = false;
       renderPass.mainScene = world.scene;
       camera.near = 0.08;
       camera.updateProjectionMatrix();
