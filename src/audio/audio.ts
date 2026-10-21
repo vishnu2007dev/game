@@ -1,3 +1,6 @@
+/** Alarm loudness. Kept low: it plays for long stretches. */
+const ALARM_LEVEL = 0.12;
+
 /**
  * Procedural audio for the station game. Everything is synthesized with the
  * Web Audio API, no sample files. The goal is physical, slightly dull and
@@ -856,7 +859,7 @@ export class AudioEngine {
         g.setTargetAtTime(base * this.duckLevel, now, 0.06);
       };
       if (this.ambienceBus) set(this.ambienceBus.gain, 0.5);
-      if (this.alarm) set(this.alarm.gain.gain, 0.26);
+      if (this.alarm) set(this.alarm.gain.gain, ALARM_LEVEL);
     } catch {
       // ignore
     }
@@ -1059,7 +1062,7 @@ export class AudioEngine {
 
     const gain = c.createGain();
     gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(0.26 * this.duckLevel, now + 0.03);
+    gain.gain.linearRampToValueAtTime(ALARM_LEVEL * this.duckLevel, now + 0.03);
 
     // Soft clipping for a harsh, slightly overdriven speaker character.
     const shaper = c.createWaveShaper();

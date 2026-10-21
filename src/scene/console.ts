@@ -504,7 +504,7 @@ export function buildConsole(screens: ScreenSet): Console {
   lampLight.position.copy(bulbPos.clone().addScaledVector(shadeDir, 0.03));
   lampLight.target.position.copy(target);
   lampLight.castShadow = true;
-  lampLight.shadow.mapSize.set(2048, 2048);
+  lampLight.shadow.mapSize.set(1024, 1024);
   lampLight.shadow.bias = -0.0004;
   lampLight.shadow.normalBias = 0.01;
   lampLight.shadow.radius = 6;

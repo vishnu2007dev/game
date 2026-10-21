@@ -21,7 +21,7 @@ import type { Tier } from './quality';
 export function buildPost(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, tier: Tier) {
   const composer = new EffectComposer(renderer, {
     frameBufferType: THREE.HalfFloatType,
-    multisampling: tier === 'high' ? 4 : 0,
+    multisampling: tier === 'high' ? 2 : 0,
   });
   composer.addPass(new RenderPass(scene, camera));
 

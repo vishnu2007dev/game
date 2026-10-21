@@ -82,7 +82,10 @@ export function startScene(root: HTMLElement): Station {
   setTextureScale(tier === 'high' ? 1 : 0.5);
 
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', stencil: false });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, tier === 'high' ? 2 : 1.5));
+  // Start at a sensible resolution; the loop below lowers it if frames are slow.
+  const maxRatio = Math.min(devicePixelRatio, tier === 'high' ? 1.5 : 1.25);
+  let pixelRatio = maxRatio;
+  renderer.setPixelRatio(pixelRatio);
   renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -391,6 +394,8 @@ export function startScene(root: HTMLElement): Station {
   let lastCctv = -1;
   const rest: Pose = { pos: new THREE.Vector3(), look: new THREE.Vector3() };
   let lastT = 0;
+  let frameTimes = 0;
+  let frameCount = 0;
 
   renderer.setAnimationLoop(() => {
     const t = clock.getElapsedTime();
@@ -478,6 +483,22 @@ export function startScene(root: HTMLElement): Station {
 
     room.porthole.update(t, camera);
     composer.render();
+
+    // Dynamic resolution: if the average frame is slow, render fewer
+    // pixels; if there is headroom, step back up. Checked once a second.
+    frameTimes += dt;
+    frameCount++;
+    if (frameTimes > 1) {
+      const fps = frameCount / frameTimes;
+      const next = fps < 45 ? Math.max(0.6, pixelRatio - 0.15) : fps > 57 ? Math.min(maxRatio, pixelRatio + 0.1) : pixelRatio;
+      if (Math.abs(next - pixelRatio) > 0.01) {
+        pixelRatio = next;
+        renderer.setPixelRatio(pixelRatio);
+        composer.setSize(innerWidth, innerHeight);
+      }
+      frameTimes = 0;
+      frameCount = 0;
+    }
 
     if (frames === 3) window.__READY = true;
   });
