@@ -86,8 +86,9 @@ export async function day1(ctx: Ctx) {
 
 /** The lights go down, and something knocks three times. */
 async function night1(ctx: Ctx) {
-  const { st, ov, hud } = ctx;
+  const { st, ov } = ctx;
   await ctx.goTo('ballast');
+  ctx.roster.show(false);
   st.setNight(true);
   await wait(2500);
   for (let i = 0; i < 3; i++) {
@@ -100,4 +101,5 @@ async function night1(ctx: Ctx) {
   st.setScreen(2, { glitch: 0 });
   await ov.nightLog(1, NIGHT1.log(ctx.state));
   st.setNight(false);
+  ctx.roster.show(true);
 }
