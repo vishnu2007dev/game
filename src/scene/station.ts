@@ -1212,7 +1212,8 @@ function buildHotspots(scene: THREE.Scene) {
   ctx.fill();
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
-  const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true });
+  // Fixed size on screen, so markers stay findable from the overview.
+  const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true, sizeAttenuation: false });
   let live: { id: string; sprite: THREE.Sprite }[] = [];
   const hits: THREE.Object3D[] = [];
   return {
@@ -1234,7 +1235,7 @@ function buildHotspots(scene: THREE.Scene) {
       return live.find((l) => l.id === id)?.sprite.position.clone() ?? null;
     },
     update(t: number) {
-      const k = 0.32 + Math.sin(t * 4) * 0.05;
+      const k = 0.05 + Math.sin(t * 4) * 0.007;
       for (const l of live) l.sprite.scale.setScalar(k);
       mat.opacity = 0.75 + Math.sin(t * 4) * 0.25;
     },
