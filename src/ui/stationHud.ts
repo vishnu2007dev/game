@@ -13,6 +13,7 @@ export class StationHud {
   private back: HTMLButtonElement;
   private card: HTMLElement;
   private fade: HTMLElement;
+  private cardToken = 0;
   onBack: () => void = () => {};
 
   constructor(root: HTMLElement) {
@@ -73,17 +74,80 @@ export class StationHud {
     this.card.hidden = true;
   }
 
-  crew(c: CrewDef) {
+  /**
+   * The card for one crew member. Their line types out as if spoken over
+   * the suit radio. With next, the card carries a button and the promise
+   * resolves when it is pressed.
+   */
+  crew(c: CrewDef, opts: { progress?: string; next?: string; skip?: string } = {}): Promise<'next' | 'skip'> {
+    const token = ++this.cardToken;
     this.card.innerHTML = `
-      <p class="sh-card-role"><span class="sh-swatch"></span><span></span></p>
+      <p class="sh-card-role"><span class="sh-swatch"></span><span></span><span class="sh-card-step"></span></p>
       <h2 class="sh-card-name"></h2>
-      <p class="sh-card-line"></p>`;
+      <p class="sh-card-line"><span class="sh-card-typed"></span><span class="sh-card-ghost"></span></p>
+      <div class="sh-card-actions">
+        <button type="button" class="sh-card-next" hidden></button>
+        <button type="button" class="sh-card-skip" hidden></button>
+      </div>`;
     this.card.querySelector<HTMLElement>('.sh-swatch')!.style.background = c.suit;
-    this.card.querySelector('.sh-card-role span:last-child')!.textContent = c.role;
+    this.card.querySelector('.sh-card-role span:nth-child(2)')!.textContent = c.role;
+    this.card.querySelector('.sh-card-step')!.textContent = opts.progress ?? '';
     this.card.querySelector('.sh-card-name')!.textContent = c.name;
-    this.card.querySelector('.sh-card-line')!.textContent = `“${c.line}”`;
+    // The full line sits invisible under the typed part so the card never resizes.
+    const line = `“${c.line}”`;
+    const typed = this.card.querySelector<HTMLElement>('.sh-card-typed')!;
+    const ghost = this.card.querySelector<HTMLElement>('.sh-card-ghost')!;
+    ghost.textContent = line;
+    let i = 0;
+    const tick = () => {
+      if (token !== this.cardToken) return;
+      i++;
+      typed.textContent = line.slice(0, i);
+      ghost.textContent = line.slice(i);
+      if (i % 3 === 0) audio.play('typing', { volume: 0.25 });
+      if (i < line.length) setTimeout(tick, 24);
+    };
+    setTimeout(tick, 250);
     this.card.hidden = false;
     audio.play('confirm', { volume: 0.5 });
+    const next = this.card.querySelector<HTMLButtonElement>('.sh-card-next')!;
+    const skip = this.card.querySelector<HTMLButtonElement>('.sh-card-skip')!;
+    if (!opts.next) return Promise.resolve('next');
+    next.hidden = false;
+    next.textContent = opts.next;
+    skip.hidden = !opts.skip;
+    skip.textContent = opts.skip ?? '';
+    return new Promise((done) => {
+      next.addEventListener('click', () => {
+        audio.play('click');
+        done('next');
+      });
+      skip.addEventListener('click', () => {
+        audio.play('click');
+        done('skip');
+      });
+    });
+  }
+
+  hideCard() {
+    this.cardToken++;
+    this.card.hidden = true;
+  }
+
+  /** Header text for moments that are not a room, like the introductions. */
+  heading(place: string, blurb: string, hint = '') {
+    this.place.textContent = place;
+    this.blurb.textContent = blurb;
+    this.hint.textContent = hint;
+  }
+
+  get backButton(): HTMLElement {
+    return this.back;
+  }
+
+  /** Show or hide the Back button, for scripted moments. */
+  allowBack(on: boolean) {
+    this.back.hidden = !on;
   }
 
   /** Fade to black, run the change, fade back in. */

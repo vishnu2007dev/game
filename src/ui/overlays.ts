@@ -117,8 +117,8 @@ export class Overlays {
   }
 
   /** Skip control shown for the whole trailer. */
-  skip(onSkip: () => void) {
-    const b = el('button', 'ov-btn ov-skip', 'Skip intro') as HTMLButtonElement;
+  skip(onSkip: () => void, label = 'Skip intro') {
+    const b = el('button', 'ov-btn ov-skip', label) as HTMLButtonElement;
     b.type = 'button';
     b.addEventListener('click', () => onSkip(), { once: true });
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onSkip();

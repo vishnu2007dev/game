@@ -61,6 +61,10 @@ export interface Station {
   repair(): void;
   /** Switch to the station cutaway (overview, or one room). */
   showStation(room?: string | null): void;
+  /** Close up on one crew member at their post; they stop and turn to talk. */
+  showCrew(id: string): void;
+  /** Where a room's centre is on screen right now, in CSS pixels. */
+  screenPoint(roomId: string): { x: number; y: number; visible: boolean };
   /** Switch to the detailed control room scene. */
   showControlRoom(): void;
   /** Events from the station view, for the interface layer. */
@@ -73,7 +77,8 @@ export type StationEvent =
   | { type: 'overview' }
   | { type: 'room'; room: RoomDef }
   | { type: 'crew'; crew: CrewDef }
-  | { type: 'control' };
+  | { type: 'control' }
+  | { type: 'read' };
 
 /** Camera framing for landscape and portrait screens. */
 function frame(camera: THREE.PerspectiveCamera, aspect: number) {
@@ -173,6 +178,8 @@ export function startScene(root: HTMLElement): Station {
   world.scene.environmentIntensity = 0.25;
   let view: 'room' | 'station' = 'room';
   let stationRoom: string | null = null;
+  /** Crew member the camera is closed up on, if any. */
+  let stationCrew: string | null = null;
   let panX = 0;
   const snapCamera = new URLSearchParams(location.search).has('snap');
   const stationCam = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 34, started: false };
@@ -189,9 +196,7 @@ export function startScene(root: HTMLElement): Station {
   const stationTap = (x: number, y: number) => {
     const hit = stationPick(x, y);
     if (hit?.crew) {
-      const home = world.rooms.find((q) => q.id === hit.crew!.home)!;
-      if (stationRoom !== home.id) station.showStation(home.id);
-      station.onStation({ type: 'crew', crew: hit.crew });
+      station.showCrew(hit.crew.id);
       return;
     }
     if (hit?.room) {
@@ -253,7 +258,10 @@ export function startScene(root: HTMLElement): Station {
   };
   const touch = matchMedia('(pointer: coarse)').matches;
   const hud = buildHud(root, touch);
-  focus.onChange = (t) => hud.setFocused(t ? t.name : null);
+  focus.onChange = (t) => {
+    hud.setFocused(t ? t.name : null);
+    if (t) station.onStation({ type: 'read' });
+  };
   hud.back.addEventListener('click', () => focus.focus(null));
   const canvas = renderer.domElement;
   let downAt: [number, number] | null = null;
@@ -450,6 +458,8 @@ export function startScene(root: HTMLElement): Station {
     showStation(roomId = null) {
       view = 'station';
       stationRoom = roomId ?? null;
+      stationCrew = null;
+      world.hold(null);
       // Screenshot runs cut straight to the new framing.
       if (snapCamera) stationCam.started = false;
       renderPass.mainScene = world.scene;
@@ -459,7 +469,33 @@ export function startScene(root: HTMLElement): Station {
       const r = roomId ? world.rooms.find((q) => q.id === roomId) : null;
       station.onStation(r ? { type: 'room', room: r } : { type: 'overview' });
     },
+    showCrew(id) {
+      const c = world.crew.find((q) => q.def.id === id);
+      if (!c) return;
+      view = 'station';
+      renderPass.mainScene = world.scene;
+      camera.near = 0.08;
+      camera.updateProjectionMatrix();
+      cine = null;
+      stationRoom = c.def.home;
+      stationCrew = id;
+      if (snapCamera) stationCam.started = false;
+      world.hold(id);
+      station.onStation({ type: 'crew', crew: c.def });
+    },
+    screenPoint(roomId) {
+      const r = world.rooms.find((q) => q.id === roomId)!;
+      const p = r.centre.clone().project(camera);
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: rect.left + ((p.x + 1) / 2) * rect.width,
+        y: rect.top + ((1 - p.y) / 2) * rect.height,
+        visible: view === 'station' && p.z < 1,
+      };
+    },
     showControlRoom() {
+      stationCrew = null;
+      world.hold(null);
       view = 'room';
       stationRoom = null;
       renderPass.mainScene = scene;
@@ -501,7 +537,11 @@ export function startScene(root: HTMLElement): Station {
     rest.look.copy(shot.look).add(new THREE.Vector3(eased.x * 0.01 * sway, -eased.y * 0.006 * sway, 0));
     if (view === 'station') {
       world.update(t, dt);
-      const aim = stationRoom ? world.roomPose(stationRoom, camera.aspect) : world.overviewPose(camera.aspect);
+      const aim = stationCrew
+        ? world.crewPose(stationCrew, camera.aspect)
+        : stationRoom
+          ? world.roomPose(stationRoom, camera.aspect)
+          : world.overviewPose(camera.aspect);
       if (!stationRoom) {
         aim.pos.x += panX;
         aim.look.x += panX;

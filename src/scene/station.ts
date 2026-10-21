@@ -123,6 +123,10 @@ export interface Station {
   update(t: number, dt: number): void;
   overviewPose(aspect: number): { pos: THREE.Vector3; look: THREE.Vector3; fov: number };
   roomPose(id: string, aspect: number): { pos: THREE.Vector3; look: THREE.Vector3; fov: number };
+  /** Close framing on one crew member, wherever they are standing. */
+  crewPose(id: string, aspect: number): { pos: THREE.Vector3; look: THREE.Vector3; fov: number };
+  /** Stop someone where they are and have them turn to the camera and talk; null lets them go back to work. */
+  hold(id: string | null): void;
 }
 
 function hullShape(inset: number) {
@@ -459,11 +463,29 @@ export function buildStation(screens: THREE.Texture[]): Station {
     return { pos: v(r.centre.x, f + 1.75, dist), look: v(r.centre.x, f + 1.3, -2.0), fov };
   };
 
+  const crewPose = (id: string, aspect: number) => {
+    const c = crew.find((q) => q.def.id === id)!;
+    const p = c.member.root.position;
+    const room = ROOMS.find((r) => r.id === c.def.home)!;
+    const fov = 30;
+    const tan = Math.tan(THREE.MathUtils.degToRad(fov / 2));
+    const dist = Math.max(0.95 / tan / Math.max(aspect, 0.45), 1.15 / tan);
+    // On wide screens the person sits left of centre, clear of their card.
+    // The camera stays inside the room so a bulkhead never fills the shot.
+    const side = aspect >= 1 ? 0.55 : 0;
+    const x = THREE.MathUtils.clamp(p.x + side, room.x0 + 1.3, room.x1 - 1.3);
+    return { pos: v(x, p.y + 1.5, p.z + dist), look: v(x, p.y + 1.2, p.z), fov };
+  };
+
   return {
     scene,
     rooms,
     crew,
     ready,
+    crewPose,
+    hold(id) {
+      for (const a of agents) a.hold(a.id === id);
+    },
     update(t, dt) {
       snow.update(dt);
       props.update(t);
@@ -486,6 +508,8 @@ class Agent {
   private until = 0;
   private spot: CrewDef['spots'][number];
   private heading = 0;
+  private held = false;
+  private now = 0;
   constructor(
     private def: CrewDef,
     private m: CrewMember,
@@ -495,9 +519,31 @@ class Agent {
     this.until = 4 + Math.random() * 6;
   }
 
+  get id() {
+    return this.def.id;
+  }
+
+  /** Stop and face the camera to talk, or go back to work. */
+  hold(on: boolean) {
+    if (on === this.held) return;
+    this.held = on;
+    if (on) {
+      this.target = null;
+      this.path = [];
+      this.heading = 0;
+      this.m.play('Idle_Talking_Loop', 0.4);
+    } else {
+      // Resume: walk to a spot after a short pause.
+      this.until = this.now + 1.5;
+      this.m.play('Idle_Loop', 0.4);
+    }
+  }
+
   update(t: number, dt: number) {
+    this.now = t;
     const p = this.m.root.position;
     this.turn(dt);
+    if (this.held) return;
     if (!this.target) {
       if (t < this.until) return;
       // Choose a different spot and walk there via the lane.

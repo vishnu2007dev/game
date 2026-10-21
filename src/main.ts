@@ -8,7 +8,11 @@ import '@fontsource/vt323/400.css';
 import '@fontsource/caveat/700.css';
 import './styles/base.css';
 import './styles/overlays.css';
-import { startScene } from './scene/app';
+import { startScene, type StationEvent } from './scene/app';
+import { CREW, ROOMS } from './scene/station';
+import { Roster } from './ui/roster';
+import { Coach } from './ui/coach';
+import { meetCrew, tutorial } from './game/onboarding';
 import { Overlays } from './ui/overlays';
 import { playTrailer, smoulder, trailerStill, calm } from './game/trailer';
 import { StationHud } from './ui/stationHud';
@@ -44,11 +48,31 @@ if (still) {
 if (!new URLSearchParams(location.search).has('station')) await ov.pressStart();
 // Station view: the cutaway, rooms, crew, and the control room as home.
 const hud = new StationHud(root);
+const roster = new Roster(root, CREW);
+const coach = new Coach(root);
+const listeners = new Set<(e: StationEvent) => void>();
+/** Resolves on the next station event that matches. */
+const nextEvent = (match: (e: StationEvent) => boolean) =>
+  new Promise<StationEvent>((resolve) => {
+    const fn = (e: StationEvent) => {
+      if (!match(e)) return;
+      listeners.delete(fn);
+      resolve(e);
+    };
+    listeners.add(fn);
+  });
 station.onStation = (e) => {
   if (e.type === 'overview') hud.overview();
   else if (e.type === 'room') hud.room(e.room);
-  else if (e.type === 'crew') hud.crew(e.crew);
-  else if (e.type === 'control') void enterControl();
+  else if (e.type === 'crew') {
+    hud.room(ROOMS.find((r) => r.id === e.crew.home)!);
+    void hud.crew(e.crew);
+  } else if (e.type === 'control') void enterControl();
+  for (const fn of [...listeners]) fn(e);
+};
+roster.onPick = (id) => {
+  if (inControl) leaveControl(() => station.showCrew(id));
+  else station.showCrew(id);
 };
 let inControl = false;
 async function enterControl() {
@@ -59,20 +83,35 @@ async function enterControl() {
     station.showControlRoom();
     root.classList.remove('is-cinematic');
     hud.controlRoom();
+    roster.show(false);
     inControl = true;
   });
 }
+function leaveControl(then: () => void) {
+  void hud.transition(() => {
+    inControl = false;
+    root.classList.add('is-cinematic');
+    roster.show(true);
+    then();
+  });
+}
 hud.onBack = () => {
-  if (inControl) {
-    void hud.transition(() => {
-      inControl = false;
-      root.classList.add('is-cinematic');
-      station.showStation('command');
-    });
-  } else station.showStation(null);
+  if (inControl) leaveControl(() => station.showStation('command'));
+  else station.showStation(null);
 };
 
-const skipToStation = new URLSearchParams(location.search).has('station');
+// First visit: meet the crew, then the tutorial. Remembered per browser.
+const params = new URLSearchParams(location.search);
+const ONBOARDED = 'helios.onboarded';
+const onboarded = () => {
+  try {
+    return localStorage.getItem(ONBOARDED) === '1';
+  } catch {
+    return false;
+  }
+};
+
+const skipToStation = params.has('station');
 for (;;) {
   if (!skipToStation) {
     await playTrailer(station, ov);
@@ -84,7 +123,17 @@ for (;;) {
   await station.crewReady;
   await hud.transition(() => {
     hud.show(true);
+    roster.show(true);
     station.showStation(null);
   });
+  if (params.has('tutorial') || (!skipToStation && !onboarded())) {
+    await meetCrew(station, hud, roster);
+    await tutorial(station, hud, roster, coach, nextEvent);
+    try {
+      localStorage.setItem(ONBOARDED, '1');
+    } catch {
+      // Private windows may refuse storage; the tutorial just shows again.
+    }
+  }
   await new Promise(() => {});
 }
