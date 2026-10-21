@@ -59,13 +59,14 @@ export function valveTask(root: HTMLElement, opts: { title: string; instruction:
 
   let prev = performance.now();
   const frame = (now: number) => {
-    const dt = Math.min(0.1, (now - prev) / 1000);
+    const real = (now - prev) / 1000;
+    const dt = Math.min(0.1, real);
     prev = now;
     shown += (pressure - shown) * Math.min(1, dt * 6);
     // Judge the real pressure; the needle only shows it with a little lag.
     const inBand = pressure > band[0] && pressure < band[1];
     if (!done) {
-      settledFor = inBand && !dragging && Math.abs(shown - pressure) < 0.02 ? settledFor + dt : 0;
+      settledFor = inBand && !dragging && Math.abs(shown - pressure) < 0.02 ? settledFor + real : 0;
       if (inBand) panel.say(dragging ? 'In the band. Let go to hold it there.' : 'Holding.', 'good');
       else panel.say(pressure > band[1] ? 'Too high. Turn clockwise.' : 'Too low. Turn back anticlockwise.', pressure > band[1] + 0.2 ? 'plain' : 'bad');
       if (settledFor > 0.8) {
