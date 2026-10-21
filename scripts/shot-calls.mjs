@@ -14,7 +14,7 @@ await p.goto(`${base}?station&snap&q=low`);
 await p.waitForSelector('.ob:not([hidden])', { timeout: 300000 });
 await p.waitForTimeout(3000);
 await p.screenshot({ path: `screenshots/day1/${tag}-list.png`, timeout: 300000 });
-await p.evaluate(() => window.__ctx.onCall('mara'));
+await p.evaluate(() => { void window.__ctx.onCall('mara'); });
 await p.waitForSelector('.ch-choice', { timeout: 120000 });
 await p.waitForTimeout(3000);
 await p.screenshot({ path: `screenshots/day1/${tag}-call.png`, timeout: 300000 });
