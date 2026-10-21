@@ -12,7 +12,7 @@ Read this first when picking the project up in a new chat.
   - engine with tests
   - synthesized sound
   - automated playthrough script
-- **Now:** step 1 (trailer and title) is built and published to the preview link. Debug stills: `?still=calm|alarm|panel|screens|pipe|porthole|blast|wreck`. Next is **step 2: station cutaway, room fly-in and walking crew in realistic suits** (check the model licences first).
+- **Now:** steps 1 and 2 are built and published. Step 2 is the station cutaway (`src/scene/station.ts`), the suited crew on the CC0 Quaternius mannequin (`src/scene/crew.ts`, licence in `CREDITS.md`), room fly-in, crew cards (`src/ui/stationHud.ts`) and the control room as the Command room. Open `?station` to skip the intro. The preview host does not serve `.glb`, so `scripts/artifact-build.mjs` packs models as base64 `.json` (`VITE_PACKED_MODELS=1`). Checks: `scripts/shot-station.mjs`, `scripts/test-station.mjs`. Next is **step 3: tutorial (skippable) and meet the crew**.
 - **Checks:** `npm run build`, `npm test`, `node scripts/playthrough.mjs <url>` (needs `npx vite preview --port 4173`).
 - **House rules:**
   - no em or en dashes anywhere (the build fails on them)

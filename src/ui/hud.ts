@@ -18,6 +18,7 @@ export function buildHud(root: HTMLElement, touch: boolean) {
     back,
     setFocused(name: string | null) {
       back.hidden = name === null;
+      root.classList.toggle('is-reading', name !== null);
       hint.hidden = name !== null;
       rotate.hidden = name === null || name === 'Switch panel' || innerWidth > innerHeight;
       if (name) back.setAttribute('aria-label', `Back to desk from ${name}`);

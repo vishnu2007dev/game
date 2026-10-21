@@ -7,6 +7,7 @@ import { Tweens, ease } from './tween';
 import { flapTexture } from './decals';
 import { audio } from '../audio/audio';
 import { Fx } from './fx';
+import { buildStation, type CrewDef, type RoomDef } from './station';
 import { glitch, dead } from '../hmi/glitch';
 import { buildPost } from './post';
 import { detectTier, prefersReducedMotion } from './quality';
@@ -58,7 +59,21 @@ export interface Station {
   shot(pose: { pos: THREE.Vector3; look: THREE.Vector3 } | null, seconds?: number): Promise<void>;
   /** Restore everything the trailer may have broken. */
   repair(): void;
+  /** Switch to the station cutaway (overview, or one room). */
+  showStation(room?: string | null): void;
+  /** Switch to the detailed control room scene. */
+  showControlRoom(): void;
+  /** Events from the station view, for the interface layer. */
+  onStation: (e: StationEvent) => void;
+  /** Resolves when the crew models have loaded. */
+  crewReady: Promise<void>;
 }
+
+export type StationEvent =
+  | { type: 'overview' }
+  | { type: 'room'; room: RoomDef }
+  | { type: 'crew'; crew: CrewDef }
+  | { type: 'control' };
 
 /** Camera framing for landscape and portrait screens. */
 function frame(camera: THREE.PerspectiveCamera, aspect: number) {
@@ -101,7 +116,7 @@ export function startScene(root: HTMLElement): Station {
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
   scene.environmentIntensity = 0.06;
 
-  const camera = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.03, 20);
+  const camera = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.03, 90);
   let shot = frame(camera, innerWidth / innerHeight);
 
   const overview = new OverviewScreen();
@@ -150,6 +165,41 @@ export function startScene(root: HTMLElement): Station {
   scene.add(redWash);
 
   const composer = buildPost(renderer, scene, camera, tier);
+  const renderPass = composer.passes[0] as unknown as { mainScene: THREE.Scene };
+
+  // The station cutaway is its own scene, sharing the live screen textures.
+  const world = buildStation([overview.texture, trends.texture, cctv.texture]);
+  world.scene.environment = scene.environment;
+  world.scene.environmentIntensity = 0.25;
+  let view: 'room' | 'station' = 'room';
+  let stationRoom: string | null = null;
+  let panX = 0;
+  const stationCam = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 34, started: false };
+  const stationRay = new THREE.Raycaster();
+  const stationPick = (x: number, y: number) => {
+    const r = canvas.getBoundingClientRect();
+    stationRay.setFromCamera(new THREE.Vector2(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1), camera);
+    const crewHit = stationRay.intersectObjects(world.crew.map((c) => c.member.hit), false)[0];
+    if (crewHit) return { crew: world.crew.find((c) => c.member.hit === crewHit.object)!.def };
+    const roomHit = stationRay.intersectObjects(world.rooms.map((q) => q.hit), false)[0];
+    if (roomHit) return { room: world.rooms.find((q) => q.hit === roomHit.object)! };
+    return null;
+  };
+  const stationTap = (x: number, y: number) => {
+    const hit = stationPick(x, y);
+    if (hit?.crew) {
+      const home = world.rooms.find((q) => q.id === hit.crew!.home)!;
+      if (stationRoom !== home.id) station.showStation(home.id);
+      station.onStation({ type: 'crew', crew: hit.crew });
+      return;
+    }
+    if (hit?.room) {
+      if (stationRoom === hit.room.id && hit.room.id === 'command') return station.onStation({ type: 'control' });
+      station.showStation(hit.room.id);
+      return;
+    }
+    if (stationRoom) station.showStation(null);
+  };
 
   // Reading the monitors: click or tap a screen to lean in, Back, Esc or
   // another click to sit back. Keys 1 to 3 jump to each screen.
@@ -206,12 +256,22 @@ export function startScene(root: HTMLElement): Station {
   hud.back.addEventListener('click', () => focus.focus(null));
   const canvas = renderer.domElement;
   let downAt: [number, number] | null = null;
+  let dragFrom: number | null = null;
   canvas.addEventListener('pointerdown', (e) => {
     downAt = [e.clientX, e.clientY];
+    dragFrom = e.clientX;
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    // Sideways drag pans the station overview on narrow screens.
+    if (view !== 'station' || dragFrom === null || stationRoom || !(e.buttons & 1)) return;
+    panX = THREE.MathUtils.clamp(panX - ((e.clientX - dragFrom) / innerWidth) * 9, -4.5, 4.5);
+    dragFrom = e.clientX;
   });
   canvas.addEventListener('pointerup', (e) => {
+    dragFrom = null;
     if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 10) return;
     downAt = null;
+    if (view === 'station') return stationTap(e.clientX, e.clientY);
     const sw = pickSwitch(e.clientX, e.clientY);
     if (sw >= 0) return operate(sw);
     if (ringing && pickPhone(e.clientX, e.clientY)) return station.onPhone();
@@ -221,9 +281,14 @@ export function startScene(root: HTMLElement): Station {
   });
   canvas.addEventListener('pointermove', (e) => {
     if (e.pointerType !== 'mouse') return;
+    if (view === 'station') return canvas.classList.toggle('can-focus', !!stationPick(e.clientX, e.clientY));
     canvas.classList.toggle('can-focus', pickSwitch(e.clientX, e.clientY) >= 0 || !!focus.pick(e.clientX, e.clientY, canvas));
   });
   addEventListener('keydown', (e) => {
+    if (view === 'station') {
+      if (e.key === 'Escape' && stationRoom) station.showStation(null);
+      return;
+    }
     if (e.key === 'Escape') focus.focus(null);
     const n = Number(e.key);
     if (n >= 1 && n <= focus.targets.length) focus.toggle(focus.targets[n - 1]);
@@ -379,6 +444,29 @@ export function startScene(root: HTMLElement): Station {
         ease.inOut,
       );
     },
+    crewReady: world.ready,
+    onStation: () => {},
+    showStation(roomId = null) {
+      view = 'station';
+      stationRoom = roomId ?? null;
+      renderPass.mainScene = world.scene;
+      camera.near = 0.08;
+      camera.updateProjectionMatrix();
+      cine = null;
+      const r = roomId ? world.rooms.find((q) => q.id === roomId) : null;
+      station.onStation(r ? { type: 'room', room: r } : { type: 'overview' });
+    },
+    showControlRoom() {
+      view = 'room';
+      stationRoom = null;
+      renderPass.mainScene = scene;
+      camera.near = 0.03;
+      camera.updateProjectionMatrix();
+      focus.pose.pos.copy(shot.pos);
+      focus.pose.look.copy(shot.look);
+      frame(camera, camera.aspect);
+      camera.updateProjectionMatrix();
+    },
     repair() {
       power = 1;
       flicker = false;
@@ -408,6 +496,39 @@ export function startScene(root: HTMLElement): Station {
     const sway = focus.focused ? 0 : 1;
     rest.pos.copy(shot.pos).add(new THREE.Vector3(eased.x * 0.035 * sway, -eased.y * 0.02 * sway, 0));
     rest.look.copy(shot.look).add(new THREE.Vector3(eased.x * 0.01 * sway, -eased.y * 0.006 * sway, 0));
+    if (view === 'station') {
+      world.update(t, dt);
+      const aim = stationRoom ? world.roomPose(stationRoom, camera.aspect) : world.overviewPose(camera.aspect);
+      if (!stationRoom) {
+        aim.pos.x += panX;
+        aim.look.x += panX;
+      }
+      // Gentle parallax and a slow drift keep the dollhouse view alive.
+      aim.pos.x += eased.x * 0.25 + Math.sin(t * 0.13) * 0.15;
+      aim.pos.y += -eased.y * 0.15;
+      const k = stationCam.started ? 1 - Math.exp(-dt * 3) : 1;
+      stationCam.started = true;
+      stationCam.pos.lerp(aim.pos, k);
+      stationCam.look.lerp(aim.look, k);
+      stationCam.fov += (aim.fov - stationCam.fov) * k;
+      camera.fov = stationCam.fov;
+      camera.updateProjectionMatrix();
+      camera.position.copy(stationCam.pos);
+      camera.lookAt(stationCam.look);
+      tweens.tick(t);
+      if (t - lastHmi > 0.1) {
+        lastHmi = t;
+        overview.draw(t);
+        trends.draw(t);
+        overview.texture.needsUpdate = true;
+        trends.texture.needsUpdate = true;
+        cctv.draw(t);
+        cctv.texture.needsUpdate = true;
+      }
+      composer.render();
+      if (frames === 3) window.__READY = true;
+      return;
+    }
     const pose = cine ?? focus.update(dt, rest, reduced);
     const breathe = reduced ? 0 : Math.sin(t * 0.55) * (focus.focused ? 0.0008 : 0.004);
     camera.position.copy(pose.pos);

@@ -944,3 +944,143 @@
   padding: 15px 28px;
   font-size: 14px;
 }
+
+/* Station view interface. */
+.sh {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  color: var(--ov-ink);
+  font-family: var(--ov-mono);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+
+.sh-top {
+  position: absolute;
+  top: calc(16px + env(safe-area-inset-top, 0px));
+  left: var(--ov-gutter-l);
+  right: var(--ov-gutter-r);
+  max-width: 46ch;
+}
+
+.sh-kicker {
+  margin: 0;
+  font: 500 11px var(--ov-mono);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ov-dim);
+  white-space: pre;
+}
+
+.sh-place {
+  margin: 4px 0 0;
+  font: 700 clamp(28px, 4vw, 44px) / 1 var(--ov-label);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.sh-blurb {
+  margin: 6px 0 0;
+  font: 400 14px/1.5 var(--ov-mono);
+  color: #c9ced2;
+}
+
+.sh-bottom {
+  position: absolute;
+  left: var(--ov-gutter-l);
+  right: var(--ov-gutter-r);
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+}
+
+.sh-hint {
+  margin: 0;
+  font: 500 12px var(--ov-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+.sh-back {
+  pointer-events: auto;
+  padding: 11px 16px;
+  color: var(--ov-ink);
+  background: rgba(8, 10, 12, 0.8);
+  border: 1px solid var(--ov-line);
+  border-radius: 0;
+  font: 500 13px/1 var(--ov-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.sh-back:hover {
+  border-color: var(--ov-ink);
+}
+
+.sh-back:focus-visible {
+  outline: 2px solid var(--ov-amber);
+  outline-offset: 2px;
+}
+
+.sh-card {
+  position: absolute;
+  right: var(--ov-gutter-r);
+  bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  width: min(360px, calc(100% - 32px));
+  box-sizing: border-box;
+  padding: 16px 18px 18px;
+  background: var(--ov-panel);
+  border-top: 1px solid var(--ov-line);
+  text-shadow: none;
+  animation: ov-rise 0.25s ease-out;
+}
+
+.sh-card-role {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font: 500 11px var(--ov-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ov-dim);
+}
+
+.sh-swatch {
+  width: 10px;
+  height: 10px;
+}
+
+.sh-card-name {
+  margin: 6px 0 8px;
+  font: 700 30px/1 var(--ov-label);
+  text-transform: uppercase;
+}
+
+.sh-card-line {
+  margin: 0;
+  font: 400 14px/1.55 var(--ov-mono);
+}
+
+.sh-fade {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  opacity: 0;
+  transition: opacity 0.4s ease-in-out;
+}
+
+.sh-fade.is-on {
+  opacity: 1;
+}
+
+@media (max-width: 640px) {
+  .sh-card {
+    left: var(--ov-gutter-l);
+    width: auto;
+  }
+}

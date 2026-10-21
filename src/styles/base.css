@@ -104,6 +104,15 @@ body {
   display: none !important;
 }
 
+/* The station HUD names the room and gives the hint; while a screen is
+   being read, only Back to desk stays on top of it. */
+.hud-hint {
+  display: none;
+}
+.is-reading .sh {
+  display: none;
+}
+
 /* No desk hints while the intro is playing. */
 .is-cinematic .hud {
   display: none;

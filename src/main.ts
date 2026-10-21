@@ -10,7 +10,8 @@ import './styles/base.css';
 import './styles/overlays.css';
 import { startScene } from './scene/app';
 import { Overlays } from './ui/overlays';
-import { playTrailer, smoulder, trailerStill } from './game/trailer';
+import { playTrailer, smoulder, trailerStill, calm } from './game/trailer';
+import { StationHud } from './ui/stationHud';
 
 // Canvas text is drawn once into textures, so every face has to be
 // loaded before the scene is built.
@@ -40,11 +41,50 @@ if (still) {
   window.__STILL = true;
   await new Promise(() => {});
 }
-await ov.pressStart();
+if (!new URLSearchParams(location.search).has('station')) await ov.pressStart();
+// Station view: the cutaway, rooms, crew, and the control room as home.
+const hud = new StationHud(root);
+station.onStation = (e) => {
+  if (e.type === 'overview') hud.overview();
+  else if (e.type === 'room') hud.room(e.room);
+  else if (e.type === 'crew') hud.crew(e.crew);
+  else if (e.type === 'control') void enterControl();
+};
+let inControl = false;
+async function enterControl() {
+  await hud.transition(() => {
+    calm(station);
+    station.setPower(1);
+    void station.spinFlaps(0.01, '05');
+    station.showControlRoom();
+    root.classList.remove('is-cinematic');
+    hud.controlRoom();
+    inControl = true;
+  });
+}
+hud.onBack = () => {
+  if (inControl) {
+    void hud.transition(() => {
+      inControl = false;
+      root.classList.add('is-cinematic');
+      station.showStation('command');
+    });
+  } else station.showStation(null);
+};
+
+const skipToStation = new URLSearchParams(location.search).has('station');
 for (;;) {
-  await playTrailer(station, ov);
-  const stop = smoulder(station);
-  const pick = await ov.titleCard();
-  stop();
-  if (pick === 'begin') await ov.comingNext();
+  if (!skipToStation) {
+    await playTrailer(station, ov);
+    const stop = smoulder(station);
+    const pick = await ov.titleCard();
+    stop();
+    if (pick === 'replay') continue;
+  }
+  await station.crewReady;
+  await hud.transition(() => {
+    hud.show(true);
+    station.showStation(null);
+  });
+  await new Promise(() => {});
 }

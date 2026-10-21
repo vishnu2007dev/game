@@ -33,7 +33,7 @@ const ROOM_POINTS = [
 ];
 
 /** Puts the room back to a normal working night before the intro starts. */
-function calm(st: Station) {
+export function calm(st: Station) {
   st.repair();
   st.setAlarm(false);
   st.setCrack(0);
