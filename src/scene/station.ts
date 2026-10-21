@@ -771,10 +771,10 @@ function furnish(
   for (const z of [-0.85, 0.85]) bed.add(box(0.7, 0.64, 0.05, m.steel, v(0, 0.32, z), 0.01));
   bed.position.set(7.6, U, -2.0);
   add(bed);
-  add(box(0.7, 0.65, 0.3, new THREE.MeshStandardMaterial({ color: 0xe4e2db, roughness: 0.5 }), v(6.6, U + 1.6, zb + 0.15)));
+  add(box(0.7, 0.65, 0.3, new THREE.MeshStandardMaterial({ color: 0xe4e2db, roughness: 0.5 }), v(7.0, U + 1.6, zb + 0.15)));
   const cross = new THREE.Group();
   cross.add(new THREE.Mesh(new THREE.PlaneGeometry(0.26, 0.08), red), new THREE.Mesh(new THREE.PlaneGeometry(0.08, 0.26), red));
-  cross.position.set(6.6, U + 1.6, zb + 0.305);
+  cross.position.set(7.0, U + 1.6, zb + 0.305);
   scene.add(cross);
   const ivPole = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 1.9, 8), m.steel);
   ivPole.position.set(7.15, U + 0.95, -1.15);
@@ -787,17 +787,17 @@ function furnish(
   // isolation valve on the bulkhead that Mara will need.
   const tank = new THREE.Mesh(new THREE.CapsuleGeometry(0.75, 2.6, 10, 36), m.hullPaint);
   tank.rotation.z = Math.PI / 2;
-  tank.position.set(-5.7, L + 1.1, zb + 0.95);
+  tank.position.set(-5.95, L + 1.1, zb + 0.95);
   add(tank);
-  for (const x of [-6.7, -4.7]) add(box(0.3, 0.5, 1.1, m.black, v(x, L + 0.25, zb + 0.95), 0.02));
-  for (const x of [-6.0, -5.1]) {
+  for (const x of [-6.95, -4.95]) add(box(0.3, 0.5, 1.1, m.black, v(x, L + 0.25, zb + 0.95), 0.02));
+  for (const x of [-6.25, -5.35]) {
     const band = new THREE.Mesh(new THREE.TorusGeometry(0.765, 0.03, 8, 40), m.black);
     band.rotation.y = Math.PI / 2;
     band.position.set(x, L + 1.1, zb + 0.95);
     add(band);
   }
   const sight = new THREE.Mesh(new THREE.PlaneGeometry(0.06, 0.9), new THREE.MeshStandardMaterial({ color: 0x163a44, emissive: 0x1b6e80, emissiveIntensity: 0.6 }));
-  sight.position.set(-4.4, L + 1.1, zb + 1.72);
+  sight.position.set(-4.65, L + 1.1, zb + 1.72);
   scene.add(sight);
   for (const x of [-3.9, -3.25]) {
     add(box(0.5, 0.18, 0.8, m.black, v(x, L + 0.09, zb + 0.5), 0.02));
@@ -812,7 +812,7 @@ function furnish(
     add(pipe(v(x, L + 0.6, zb + 0.75), v(x, LOWER.ceil - 0.62, zb + 0.75), 0.06, m.steel));
   }
   add(pipe(v(-6.8, LOWER.ceil - 0.62, zb + 0.75), v(-3.0, LOWER.ceil - 0.62, zb + 0.75), 0.08, m.steel));
-  add(pipe(v(-5.7, L + 1.85, zb + 0.95), v(-5.7, LOWER.ceil - 0.62, zb + 0.95), 0.07, m.steel));
+  add(pipe(v(-5.95, L + 1.85, zb + 0.95), v(-5.95, LOWER.ceil - 0.62, zb + 0.95), 0.07, m.steel));
   add(box(0.7, 0.5, 0.05, m.enamel, v(-3.55, L + 1.65, zb + 0.03)));
   for (const x of [-3.72, -3.38]) {
     const g = new THREE.Mesh(new THREE.CircleGeometry(0.11, 24), new THREE.MeshStandardMaterial({ color: 0xe9e5d8, roughness: 0.5 }));
@@ -905,8 +905,8 @@ function furnish(
     vz.position.set(x, L + 1.94, zb + 0.37);
     scene.add(vz);
   }
-  add(box(1.0, 0.9, 0.7, new THREE.MeshStandardMaterial({ color: 0x8a2d22, roughness: 0.55, metalness: 0.3 }), v(6.4, L + 0.45, zb + 0.4), 0.04));
-  add(box(0.45, 0.6, 0.2, m.enamel, v(6.4, L + 1.45, zb + 0.1), 0.02));
+  add(box(0.85, 0.9, 0.7, new THREE.MeshStandardMaterial({ color: 0x8a2d22, roughness: 0.55, metalness: 0.3 }), v(6.75, L + 0.45, zb + 0.4), 0.04));
+  add(box(0.45, 0.6, 0.2, m.enamel, v(6.75, L + 1.45, zb + 0.1), 0.02));
   const ladderX = (TRUNK.x0 + TRUNK.x1) / 2;
   for (const dx of [-0.22, 0.22]) add(box(0.05, UPPER.floor + 1.0, 0.05, m.steel, v(ladderX + dx, (UPPER.floor + 1.0) / 2, TRUNK.z0 + 0.25), 0.01));
   for (let y = 0.3; y < UPPER.floor + 0.9; y += 0.3) add(box(0.44, 0.03, 0.03, m.steel, v(ladderX, y, TRUNK.z0 + 0.25), 0.01));
@@ -920,7 +920,7 @@ function furnish(
   scene.add(sign(['LIGHTS OUT 2200'], v(4.0, U + 2.4, zb + 0.02), { ...whiteSign, w: 0.7 }));
   scene.add(sign(['DANGER', '440 V'], v(1.3, L + 2.3, zb + 0.02), { ...yellowSign, w: 0.42 }));
   scene.add(sign(['TRIM TANK 2', 'MAX 6 BAR'], v(-7.3, L + 2.0, zb + 0.02), { ...whiteSign, w: 0.6 }));
-  scene.add(sign(['NEVER DIVE', 'ALONE'], v(6.4, L + 2.15, zb + 0.02), { ...yellowSign, w: 0.55 }));
+  scene.add(sign(['NEVER DIVE', 'ALONE'], v(6.75, L + 2.15, zb + 0.02), { ...yellowSign, w: 0.55 }));
 
   return {
     update(t: number) {
