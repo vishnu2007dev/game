@@ -17,6 +17,15 @@ export type Sfx =
   | 'confirm' // HMI acknowledge beep: single soft square-ish tone, 120 ms
   | 'deny' // HMI reject: two low short beeps
   | 'sonar' // sonar/scan ping: sine ping with long tail and slight delay echo
+  | 'zap' // electrical arc discharge: crackling bandpassed noise plus mains buzz, ~0.35 s
+  | 'sparks' // shower of tiny crackles, ~0.8 s
+  | 'spray' // high pressure water/air jet: loud hiss, quick attack, slow decay, ~2.5 s
+  | 'crack' // thick glass cracking under pressure: snaps then a creak, slight echo, ~1.2 s
+  | 'boom' // deep impact explosion: sub drop plus lowpassed noise, long tail, ~2.5 s
+  | 'powerDown' // everything shutting off: turbine-like descending tone, ~1.5 s
+  | 'riser' // cinematic tension riser, ~4 s, ends abruptly
+  | 'hit' // trailer title hit: low thump, metallic clang, short reverb tail, ~2 s
+  | 'heartbeat' // a single soft lub dub
   | 'typing'; // one soft teletype character tick (used repeatedly, must be very short and quiet)
 
 /** Shared things every voice needs. */
@@ -146,6 +155,26 @@ function makeTicks(c: AudioContext): AudioBuffer[] {
     out.push(buf);
   }
   return out;
+}
+
+/** Feedback delay used as a cheap small-room reverb. Returns the input node to write into. */
+function echoBus(c: AudioContext, d: AudioNode, delay: number, fb: number, wet: number, lp: number): GainNode {
+  const input = c.createGain();
+  input.connect(d);
+  const dl = c.createDelay(1);
+  dl.delayTime.value = delay;
+  const f = c.createBiquadFilter();
+  f.type = 'lowpass';
+  f.frequency.value = lp;
+  const fbg = c.createGain();
+  fbg.gain.value = fb;
+  const wg = c.createGain();
+  wg.gain.value = wet;
+  input.connect(dl);
+  dl.connect(f);
+  f.connect(fbg).connect(dl);
+  f.connect(wg).connect(d);
+  return input;
 }
 
 // ---------------------------------------------------------------------------
@@ -396,6 +425,248 @@ const voices: Record<Exclude<Sfx, 'typing'>, Voice> = {
     e2.connect(d);
     ping(e2, t + 0.86, 0.13);
   },
+
+  zap(k, t, d) {
+    const { c } = k;
+    const dur = 0.35;
+    const bus = c.createGain();
+    bus.connect(d);
+
+    // Crackle: noise through a bandpass that jumps around, with random amplitude stutter.
+    const src = c.createBufferSource();
+    src.buffer = k.noise;
+    src.loop = true;
+    const bp = c.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.Q.value = 3;
+    const ng = c.createGain();
+    src.connect(bp).connect(ng).connect(bus);
+
+    // Mains buzz underneath.
+    const saw = c.createOscillator();
+    saw.type = 'sawtooth';
+    const slp = c.createBiquadFilter();
+    slp.type = 'lowpass';
+    slp.frequency.value = 1400;
+    const sg = c.createGain();
+    saw.connect(slp).connect(sg).connect(bus);
+
+    ng.gain.setValueAtTime(0.0001, t);
+    sg.gain.setValueAtTime(0.0001, t);
+    for (let s = 0; s < dur; s += rnd(0.006, 0.028)) {
+      const at = t + s;
+      const env = 1 - (s / dur) * 0.6;
+      bp.frequency.setValueAtTime(rnd(1000, 6000), at);
+      saw.frequency.setValueAtTime(rnd(50, 120), at);
+      const on = Math.random() < 0.75 ? rnd(0.3, 1) : 0.02;
+      ng.gain.setValueAtTime(0.3 * on * env, at);
+      sg.gain.setValueAtTime(0.1 * (Math.random() < 0.8 ? 1 : 0.1) * env, at);
+    }
+    bus.gain.setValueAtTime(1, t + dur - 0.03);
+    bus.gain.linearRampToValueAtTime(0.0001, t + dur);
+    src.start(t, Math.random() * (k.noise.duration - 0.5));
+    saw.start(t);
+    src.stop(t + dur + 0.02);
+    saw.stop(t + dur + 0.02);
+    // Initial sharp snap of the arc striking.
+    burst(k, d, t, { type: 'highpass', f: 2500, dur: 0.02, peak: 0.25, attack: 0.0005 });
+  },
+
+  sparks(k, t, d) {
+    const n = 26 + Math.floor(Math.random() * 14);
+    for (let i = 0; i < n; i++) {
+      // Denser at the start, thinning out.
+      const x = Math.pow(Math.random(), 1.7);
+      const at = t + x * 0.78;
+      burst(k, d, at, {
+        type: 'bandpass',
+        f: rnd(2000, 9000),
+        q: rnd(1.5, 4),
+        dur: rnd(0.003, 0.012),
+        peak: rnd(0.05, 0.2) * (1 - x * 0.6),
+        attack: 0.0004,
+      });
+    }
+  },
+
+  spray(k, t, d) {
+    const { c } = k;
+    // Hiss: bright noise with a fast attack and slow decay.
+    burst(k, d, t, { type: 'highpass', f: 1500, q: 0.7, dur: 2.5, peak: 0.28, attack: 0.04 });
+    // Turbulent body: a band that wobbles in level and drifts down as pressure drops.
+    const src = c.createBufferSource();
+    src.buffer = k.noise;
+    src.loop = true;
+    const bp = c.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(1300, t);
+    bp.frequency.exponentialRampToValueAtTime(550, t + 2.5);
+    bp.Q.value = 0.8;
+    const env = c.createGain();
+    env.gain.setValueAtTime(0.0001, t);
+    env.gain.linearRampToValueAtTime(0.3, t + 0.05);
+    env.gain.setTargetAtTime(0, t + 0.05, 0.42);
+    const wob = c.createGain();
+    wob.gain.value = 0.75;
+    const lfo = c.createOscillator();
+    lfo.frequency.value = rnd(6, 11);
+    const depth = c.createGain();
+    depth.gain.value = 0.25;
+    lfo.connect(depth).connect(wob.gain);
+    src.connect(bp).connect(wob).connect(env).connect(d);
+    src.start(t, Math.random() * 1.4);
+    lfo.start(t);
+    src.stop(t + 2.55);
+    lfo.stop(t + 2.55);
+  },
+
+  crack(k, t, d) {
+    const { c } = k;
+    const bus = echoBus(c, d, 0.047, 0.42, 0.4, 3200);
+    // A few sharp snaps as the glass gives.
+    const snaps = [0, rnd(0.05, 0.12), rnd(0.18, 0.3)];
+    snaps.forEach((s, i) => {
+      const at = t + s;
+      const lvl = i === 0 ? 1 : rnd(0.5, 0.8);
+      burst(k, bus, at, { type: 'highpass', f: 1800, dur: 0.035, peak: 0.45 * lvl, attack: 0.0004 });
+      burst(k, bus, at, { type: 'bandpass', f: rnd(600, 1100), q: 1.5, dur: 0.05, peak: 0.3 * lvl, attack: 0.0006 });
+      tone(k, bus, at, { f0: rnd(160, 240), f1: 70, dur: 0.07, peak: 0.25 * lvl, attack: 0.001 });
+    });
+    // Creaking stretch: sine sweeping down with slight vibrato.
+    const st = t + 0.28;
+    const cdur = 0.9;
+    const o = c.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(rnd(520, 640), st);
+    o.frequency.exponentialRampToValueAtTime(rnd(170, 230), st + cdur);
+    const vib = c.createOscillator();
+    vib.frequency.value = rnd(9, 13);
+    const vd = c.createGain();
+    vd.gain.value = 9;
+    vib.connect(vd).connect(o.frequency);
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, st);
+    g.gain.linearRampToValueAtTime(0.14, st + 0.15);
+    g.gain.setTargetAtTime(0, st + 0.2, cdur / 6);
+    o.connect(g).connect(bus);
+    o.start(st);
+    vib.start(st);
+    o.stop(st + cdur + 0.05);
+    vib.stop(st + cdur + 0.05);
+    burst(k, bus, st, { type: 'bandpass', f: 400, f1: 220, q: 10, dur: cdur, peak: 0.05, attack: 0.15 });
+  },
+
+  boom(k, t, d) {
+    // Sub drop, then a muffled noise blast and a long rumbling tail.
+    tone(k, d, t, { f0: 70, f1: 30, dur: 2.5, sweep: 1.2, peak: 0.8, attack: 0.004 });
+    burst(k, d, t, { type: 'lowpass', f: 600, f1: 90, dur: 1.8, sweep: 1.0, q: 0.8, peak: 0.55, attack: 0.003 });
+    burst(k, d, t, { type: 'bandpass', f: 1800, dur: 0.05, peak: 0.12, attack: 0.001 });
+    burst(k, d, t + 0.08, { type: 'lowpass', f: 80, dur: 2.4, peak: 0.3, attack: 0.15 });
+  },
+
+  powerDown(k, t, d) {
+    const { c } = k;
+    const dur = 1.5;
+    const bus = c.createGain();
+    bus.gain.setValueAtTime(0.0001, t);
+    bus.gain.linearRampToValueAtTime(1, t + 0.02);
+    bus.gain.setValueAtTime(1, t + dur - 0.35);
+    bus.gain.linearRampToValueAtTime(0.0001, t + dur + 0.1);
+    bus.connect(d);
+    // Spinning turbine: saw falling in pitch, its filter closing with it.
+    const o = c.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(400, t);
+    o.frequency.exponentialRampToValueAtTime(30, t + dur);
+    const lp = c.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(1400, t);
+    lp.frequency.exponentialRampToValueAtTime(90, t + dur);
+    lp.Q.value = 1.5;
+    const og = c.createGain();
+    og.gain.value = 0.22;
+    o.connect(lp).connect(og).connect(bus);
+    o.start(t);
+    o.stop(t + dur + 0.12);
+    tone(k, bus, t, { f0: 200, f1: 15, dur: dur, peak: 0.2, attack: 0.01 });
+    // Air and bearing noise winding down.
+    burst(k, bus, t, { type: 'bandpass', f: 1200, f1: 80, q: 1.2, dur: dur, peak: 0.16, attack: 0.05 });
+  },
+
+  riser(k, t, d) {
+    const { c } = k;
+    const dur = 4;
+    const bus = c.createGain();
+    bus.gain.setValueAtTime(0.0001, t);
+    bus.gain.exponentialRampToValueAtTime(0.5, t + dur * 0.97);
+    bus.gain.setValueAtTime(0.5, t + dur - 0.01);
+    // Abrupt end, with a few ms of ramp to avoid a click.
+    bus.gain.linearRampToValueAtTime(0, t + dur);
+    bus.connect(d);
+
+    const src = c.createBufferSource();
+    src.buffer = k.noise;
+    src.loop = true;
+    const bp = c.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(250, t);
+    bp.frequency.exponentialRampToValueAtTime(6500, t + dur);
+    bp.Q.value = 2.5;
+    const ng = c.createGain();
+    ng.gain.setValueAtTime(0.1, t);
+    ng.gain.linearRampToValueAtTime(0.55, t + dur);
+    src.connect(bp).connect(ng).connect(bus);
+    src.start(t, Math.random() * 1.4);
+    src.stop(t + dur + 0.02);
+
+    const lp = c.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(500, t);
+    lp.frequency.exponentialRampToValueAtTime(5000, t + dur);
+    const sg = c.createGain();
+    sg.gain.setValueAtTime(0.03, t);
+    sg.gain.linearRampToValueAtTime(0.17, t + dur);
+    lp.connect(sg).connect(bus);
+    for (const det of [-14, 14]) {
+      const o = c.createOscillator();
+      o.type = 'sawtooth';
+      o.detune.value = det;
+      o.frequency.setValueAtTime(110, t);
+      o.frequency.exponentialRampToValueAtTime(880, t + dur);
+      o.connect(lp);
+      o.start(t);
+      o.stop(t + dur + 0.02);
+    }
+  },
+
+  hit(k, t, d) {
+    const { c } = k;
+    const bus = echoBus(c, d, 0.043, 0.55, 0.45, 2600);
+    // Big low thump.
+    tone(k, bus, t, { f0: 62, f1: 28, dur: 1.8, sweep: 0.9, peak: 0.85, attack: 0.003 });
+    burst(k, bus, t, { type: 'lowpass', f: 220, dur: 0.4, peak: 0.5, attack: 0.002 });
+    // Metallic clang: inharmonic partials with fast decay.
+    const partials: Array<[number, number, number]> = [
+      [220, 0.11, 0.7],
+      [347, 0.09, 0.55],
+      [512, 0.07, 0.4],
+      [761, 0.05, 0.3],
+    ];
+    for (const [f, a, dur] of partials) {
+      tone(k, bus, t, { f0: f, dur, peak: a, attack: 0.001 });
+    }
+    burst(k, bus, t, { type: 'bandpass', f: 3200, q: 1, dur: 0.04, peak: 0.15, attack: 0.0005 });
+  },
+
+  heartbeat(k, t, d) {
+    const lp = k.c.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 150;
+    lp.connect(d);
+    tone(k, lp, t, { f0: 64, f1: 40, dur: 0.16, peak: 0.4, attack: 0.006 });
+    burst(k, lp, t, { type: 'lowpass', f: 120, dur: 0.07, peak: 0.15, attack: 0.004 });
+    tone(k, lp, t + 0.2, { f0: 54, f1: 36, dur: 0.14, peak: 0.26, attack: 0.006 });
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -426,6 +697,10 @@ export class AudioEngine {
   private pulseBus: AudioNode | null = null;
   private pulseTimer: ReturnType<typeof setInterval> | null = null;
   private nextBeat = 0;
+  private liveBuses: GainNode[] = [];
+  private restoreTimer: ReturnType<typeof setTimeout> | null = null;
+  private duckTimer: ReturnType<typeof setTimeout> | null = null;
+  private duckLevel = 1;
 
   /** Must be called from a user gesture handler. Creates/resumes the AudioContext. Safe to call more than once. */
   async unlock(): Promise<void> {
@@ -468,6 +743,11 @@ export class AudioEngine {
       const vol = Math.max(0, Math.min(2, opts?.volume ?? 1));
       const pan = opts?.pan;
       const out = this.makeBus(c, master, vol, pan);
+      this.liveBuses.push(out);
+      setTimeout(() => {
+        const i = this.liveBuses.indexOf(out);
+        if (i >= 0) this.liveBuses.splice(i, 1);
+      }, 6000);
       if (sfx === 'typing') {
         this.typingTick(c, out);
         return;
@@ -504,6 +784,79 @@ export class AudioEngine {
       rig.gain.gain.setValueAtTime(rig.gain.gain.value, now);
       rig.gain.gain.setTargetAtTime(0, now, 0.075);
       for (const o of rig.oscs) o.stop(now + 0.4);
+    } catch {
+      // ignore
+    }
+  }
+
+  /**
+   * Fades everything to silence over fadeSeconds (sounds already playing are cut for good,
+   * the alarm is stopped), then restores the master level for future sounds.
+   */
+  stopAll(fadeSeconds = 0.2): void {
+    this.stopAlarm();
+    try {
+      const c = this.ctx;
+      const master = this.master;
+      if (!c || !master) return;
+      const fade = Math.max(0.01, Number.isFinite(fadeSeconds) ? fadeSeconds : 0.2);
+      const now = c.currentTime;
+      // Fade the master, and also kill every live one shot bus so nothing returns after the restore.
+      master.gain.cancelScheduledValues(now);
+      master.gain.setValueAtTime(master.gain.value, now);
+      master.gain.linearRampToValueAtTime(0, now + fade);
+      for (const b of this.liveBuses) {
+        b.gain.cancelScheduledValues(now);
+        b.gain.setValueAtTime(b.gain.value, now);
+        b.gain.linearRampToValueAtTime(0, now + fade);
+      }
+      this.liveBuses = [];
+      if (this.restoreTimer !== null) clearTimeout(this.restoreTimer);
+      this.restoreTimer = setTimeout(() => {
+        this.restoreTimer = null;
+        try {
+          const cc = this.ctx;
+          const m = this.master;
+          if (!cc || !m) return;
+          const t = cc.currentTime;
+          m.gain.cancelScheduledValues(t);
+          m.gain.setValueAtTime(this._muted ? 0 : MASTER_LEVEL, t);
+        } catch {
+          // ignore
+        }
+      }, (fade + 0.05) * 1000);
+    } catch {
+      // ignore
+    }
+  }
+
+  /** Temporarily lowers ambience and alarm to `level` (0 to 1), restoring after `seconds`. */
+  duck(level: number, seconds: number): void {
+    this.duckLevel = Math.max(0, Math.min(1, Number.isFinite(level) ? level : 1));
+    this.applyDuck();
+    if (this.duckTimer !== null) clearTimeout(this.duckTimer);
+    this.duckTimer = setTimeout(
+      () => {
+        this.duckTimer = null;
+        this.duckLevel = 1;
+        this.applyDuck();
+      },
+      Math.max(0, Number.isFinite(seconds) ? seconds : 0) * 1000,
+    );
+  }
+
+  private applyDuck(): void {
+    const c = this.ctx;
+    if (!c) return;
+    try {
+      const now = c.currentTime;
+      const set = (g: AudioParam, base: number): void => {
+        g.cancelScheduledValues(now);
+        g.setValueAtTime(g.value, now);
+        g.setTargetAtTime(base * this.duckLevel, now, 0.06);
+      };
+      if (this.ambienceBus) set(this.ambienceBus.gain, 0.5);
+      if (this.alarm) set(this.alarm.gain.gain, 0.26);
     } catch {
       // ignore
     }
@@ -592,7 +945,7 @@ export class AudioEngine {
 
     const bus = c.createGain();
     bus.gain.setValueAtTime(0, t);
-    bus.gain.linearRampToValueAtTime(0.5, t + 2);
+    bus.gain.linearRampToValueAtTime(0.5 * this.duckLevel, t + 2);
     bus.connect(master);
     this.ambienceBus = bus;
 
@@ -706,7 +1059,7 @@ export class AudioEngine {
 
     const gain = c.createGain();
     gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(0.26, now + 0.03);
+    gain.gain.linearRampToValueAtTime(0.26 * this.duckLevel, now + 0.03);
 
     // Soft clipping for a harsh, slightly overdriven speaker character.
     const shaper = c.createWaveShaper();

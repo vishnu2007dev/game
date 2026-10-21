@@ -103,3 +103,8 @@ body {
 [hidden] {
   display: none !important;
 }
+
+/* No desk hints while the intro is playing. */
+.is-cinematic .hud {
+  display: none;
+}

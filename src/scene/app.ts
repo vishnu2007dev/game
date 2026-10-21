@@ -6,6 +6,8 @@ import { buildConsole, BAT_DOWN, BAT_UP, GUARD_OPEN, type PanelSwitch } from './
 import { Tweens, ease } from './tween';
 import { flapTexture } from './decals';
 import { audio } from '../audio/audio';
+import { Fx } from './fx';
+import { glitch, dead } from '../hmi/glitch';
 import { buildPost } from './post';
 import { detectTier, prefersReducedMotion } from './quality';
 import { setTextureScale } from './textures';
@@ -18,6 +20,7 @@ import { buildHud } from '../ui/hud';
 declare global {
   interface Window {
     __READY?: boolean;
+    __STILL?: boolean;
   }
 }
 
@@ -42,6 +45,19 @@ export interface Station {
   shake(strength: number, seconds: number): void;
   /** Dim the room for night logs and day changes. */
   setNight(on: boolean): void;
+  fx: Fx;
+  /** Mains power: 1 normal, 0 blackout. Flicker makes it stutter. */
+  setPower(level: number, flicker?: boolean): void;
+  /** Screen failure per monitor: 0 centre, 1 left, 2 right. */
+  setScreen(index: number, state: { glitch?: number; dead?: boolean }): void;
+  setCrack(progress: number): void;
+  /** Something large passing outside the viewport, 0 or 1. */
+  setPresence(v: number): void;
+  spinFlaps(seconds: number, final: string): Promise<void>;
+  /** Move the camera to a scripted shot, or back to the player (null). */
+  shot(pose: { pos: THREE.Vector3; look: THREE.Vector3 } | null, seconds?: number): Promise<void>;
+  /** Restore everything the trailer may have broken. */
+  repair(): void;
 }
 
 /** Camera framing for landscape and portrait screens. */
@@ -102,6 +118,7 @@ export function startScene(root: HTMLElement): Station {
   scene.add(new THREE.HemisphereLight(0x6f8796, 0x0a0908, 0.12));
 
   // Each monitor lights the desk in front of it.
+  const screenLights: { light: THREE.RectAreaLight; base: number }[] = [];
   for (const { mesh, size } of desk.screens) {
     const normal = new THREE.Vector3(0, 0, 1).applyQuaternion(mesh.getWorldQuaternion(new THREE.Quaternion()));
     const pos = mesh.getWorldPosition(new THREE.Vector3()).addScaledVector(normal, 0.01);
@@ -109,7 +126,16 @@ export function startScene(root: HTMLElement): Station {
     light.position.copy(pos);
     light.lookAt(pos.clone().add(normal));
     scene.add(light);
+    screenLights.push({ light, base: light.intensity });
   }
+  const hemi = scene.children.find((c) => (c as THREE.HemisphereLight).isHemisphereLight) as THREE.HemisphereLight;
+  const hemiBase = hemi.intensity;
+  // Dim red emergency lighting that takes over in a blackout.
+  const emergencyLight = new THREE.PointLight(0xff2a14, 0, 4, 2);
+  emergencyLight.position.set(0, 2.1, -0.2);
+  scene.add(emergencyLight);
+  const fx = new Fx();
+  scene.add(fx.group);
 
   // Cold water light through the viewport.
   const sea = new THREE.PointLight(0x2f9bab, 0.8, 3.2, 2);
@@ -213,6 +239,7 @@ export function startScene(root: HTMLElement): Station {
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
     composer.setSize(innerWidth, innerHeight);
+    fx.setSize(innerWidth, innerHeight);
   };
   addEventListener('resize', resize);
   resize();
@@ -231,6 +258,15 @@ export function startScene(root: HTMLElement): Station {
     return flapTex.get(ch)!;
   };
   let rescueShown = '13';
+  let power = 1;
+  let flicker = false;
+  const screenFx = [0, 1, 2].map(() => ({ glitch: 0, dead: false }));
+  let cine: { pos: THREE.Vector3; look: THREE.Vector3 } | null = null;
+  const camLook = new THREE.Vector3();
+  const setFlap = (flap: THREE.Mesh, ch: string) => {
+    (flap.material as THREE.MeshStandardMaterial).map = flapFor(ch === ' ' ? '' : ch);
+    (flap.material as THREE.MeshStandardMaterial).needsUpdate = true;
+  };
   const lampLight = desk.lamp.light;
   const lampBase = lampLight.intensity;
 
@@ -294,6 +330,59 @@ export function startScene(root: HTMLElement): Station {
     setNight(on) {
       nightTarget = on ? 1 : 0;
     },
+    fx,
+    setPower(level, stutter = false) {
+      power = level;
+      flicker = stutter;
+    },
+    setScreen(i, st) {
+      Object.assign(screenFx[i], st);
+    },
+    setCrack(p) {
+      room.porthole.setCrack(p);
+    },
+    setPresence(v) {
+      room.porthole.setPresence(v);
+    },
+    async spinFlaps(seconds, final) {
+      const end = performance.now() + seconds * 1000;
+      while (performance.now() < end) {
+        desk.flaps.forEach((f) => setFlap(f, String(Math.floor(Math.random() * 10))));
+        audio.play('flap', { volume: 0.5 });
+        await new Promise((r) => setTimeout(r, 90));
+      }
+      desk.flaps.forEach((f, i) => setFlap(f, final[i] ?? ' '));
+      rescueShown = final;
+      audio.play('flap');
+    },
+    async shot(pose, seconds = 2) {
+      const fromPos = camera.position.clone();
+      const fromLook = camLook.clone();
+      if (!pose) {
+        // Hand the camera back to the player from wherever it is now.
+        focus.pose.pos.copy(camera.position);
+        focus.pose.look.copy(camLook);
+        cine = null;
+        return;
+      }
+      cine = { pos: fromPos.clone(), look: fromLook.clone() };
+      const c = cine;
+      await tweens.run(
+        seconds,
+        (k) => {
+          c.pos.lerpVectors(fromPos, pose.pos, k);
+          c.look.lerpVectors(fromLook, pose.look, k);
+        },
+        ease.inOut,
+      );
+    },
+    repair() {
+      power = 1;
+      flicker = false;
+      screenFx.forEach((f) => Object.assign(f, { glitch: 0, dead: false }));
+      room.porthole.setCrack(0);
+      alarmOn = false;
+    },
   };
 
   const clock = new THREE.Clock();
@@ -314,7 +403,7 @@ export function startScene(root: HTMLElement): Station {
     const sway = focus.focused ? 0 : 1;
     rest.pos.copy(shot.pos).add(new THREE.Vector3(eased.x * 0.035 * sway, -eased.y * 0.02 * sway, 0));
     rest.look.copy(shot.look).add(new THREE.Vector3(eased.x * 0.01 * sway, -eased.y * 0.006 * sway, 0));
-    const pose = focus.update(dt, rest, reduced);
+    const pose = cine ?? focus.update(dt, rest, reduced);
     const breathe = reduced ? 0 : Math.sin(t * 0.55) * (focus.focused ? 0.0008 : 0.004);
     camera.position.copy(pose.pos);
     camera.position.y += breathe;
@@ -324,11 +413,25 @@ export function startScene(root: HTMLElement): Station {
       camera.position.y += (Math.random() - 0.5) * 0.01 * fade;
     }
     camera.lookAt(pose.look);
+    camLook.copy(pose.look);
     tweens.tick(t);
+    fx.update(t, dt);
+
+    // Mains power drives the lamp, the screens and the fill light. A
+    // stutter drops out at random, like a failing bus.
+    const live = flicker ? (Math.random() < 0.18 ? 0.05 : power) : power;
+    for (const sl of screenLights) sl.light.intensity = sl.base * live;
+    desk.screens.forEach((sc, i) => {
+      const m = sc.mesh.material as THREE.MeshStandardMaterial;
+      m.emissiveIntensity = screenFx[i].dead ? 0.25 : Math.max(0.15, live);
+    });
+    hemi.intensity = hemiBase * (0.3 + 0.7 * live);
+    emergencyLight.intensity = (1 - power) * 1.1;
 
     // Night dims the practical lights; the screens stay on.
     night += (nightTarget - night) * Math.min(1, dt * 1.5);
-    lampLight.intensity = lampBase * (1 - night * 0.75);
+    lampLight.intensity = lampBase * (1 - night * 0.75) * live;
+    (desk.lamp.bulb.material as THREE.MeshStandardMaterial).emissiveIntensity = 9 * live;
 
     // The phone rings in bursts and the handset rattles in its cradle.
     if (ringing) {
@@ -344,13 +447,19 @@ export function startScene(root: HTMLElement): Station {
     if (t - lastHmi > 0.1) {
       lastHmi = t;
       overview.draw(t);
-      overview.texture.needsUpdate = true;
       trends.draw(t);
-      trends.texture.needsUpdate = true;
+      [overview, trends].forEach((sc, i) => {
+        const f = screenFx[i === 0 ? 0 : 1];
+        if (f.dead) dead(sc.canvas, Math.random() < 0.3);
+        else if (f.glitch > 0) glitch(sc.canvas, f.glitch);
+        sc.texture.needsUpdate = true;
+      });
     }
     if (t - lastCctv > 1 / 12) {
       lastCctv = t;
       cctv.draw(t);
+      if (screenFx[2].dead) dead(cctv.canvas, Math.random() < 0.3);
+      else if (screenFx[2].glitch > 0) glitch(cctv.canvas, screenFx[2].glitch);
       cctv.texture.needsUpdate = true;
     }
 

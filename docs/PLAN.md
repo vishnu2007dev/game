@@ -12,7 +12,7 @@ Read this first when picking the project up in a new chat.
   - engine with tests
   - synthesized sound
   - automated playthrough script
-- **Now:** v2 plan below. Next step is **1. Trailer and title**.
+- **Now:** step 1 (trailer and title) is built and published to the preview link. Debug stills: `?still=calm|alarm|panel|screens|pipe|porthole|blast|wreck`. Next is **step 2: station cutaway, room fly-in and walking crew in realistic suits** (check the model licences first).
 - **Checks:** `npm run build`, `npm test`, `node scripts/playthrough.mjs <url>` (needs `npx vite preview --port 4173`).
 - **House rules:**
   - no em or en dashes anywhere (the build fails on them)

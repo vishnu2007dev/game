@@ -138,6 +138,77 @@ export interface Porthole {
   group: THREE.Group;
   update(time: number, camera: THREE.Camera): void;
   setPresence(v: number): void;
+  /** 0 is intact; 1 is a fully spread fracture. */
+  setCrack(progress: number): void;
+}
+
+/**
+ * Pressure fracture in the glass: branching cracks spreading from one
+ * impact point, drawn up to the given progress.
+ */
+function crackPainter() {
+  const s = 1024;
+  const c = document.createElement('canvas');
+  c.width = c.height = s;
+  const ctx = c.getContext('2d')!;
+  const rand = mulberry32(31);
+  type Seg = { x: number; y: number; a: number; len: number; w: number; depth: number; start: number };
+  const segs: { x0: number; y0: number; x1: number; y1: number; w: number; start: number }[] = [];
+  const grow = (g: Seg) => {
+    let { x, y, a } = g;
+    const steps = 6 + Math.floor(rand() * 6);
+    for (let i = 0; i < steps; i++) {
+      a += (rand() - 0.5) * 0.7;
+      const l = (g.len / steps) * (0.6 + rand() * 0.8);
+      const nx = x + Math.cos(a) * l;
+      const ny = y + Math.sin(a) * l;
+      segs.push({ x0: x, y0: y, x1: nx, y1: ny, w: g.w, start: g.start + (i / steps) * 0.5 });
+      if (g.depth < 3 && rand() < 0.28) grow({ x: nx, y: ny, a: a + (rand() - 0.5) * 1.6, len: g.len * 0.55, w: g.w * 0.6, depth: g.depth + 1, start: g.start + (i / steps) * 0.5 });
+      x = nx;
+      y = ny;
+    }
+  };
+  const ix = s * 0.58;
+  const iy = s * 0.42;
+  for (let i = 0; i < 9; i++) grow({ x: ix, y: iy, a: (i / 9) * Math.PI * 2 + rand() * 0.4, len: s * (0.25 + rand() * 0.3), w: 3.2, depth: 0, start: rand() * 0.15 });
+  // Concentric ring fractures around the impact.
+  const rings = [s * 0.05, s * 0.11];
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  let drawn = -1;
+  return {
+    tex,
+    draw(p: number) {
+      const q = Math.round(p * 40) / 40;
+      if (q === drawn) return;
+      drawn = q;
+      ctx.clearRect(0, 0, s, s);
+      ctx.lineCap = 'round';
+      for (const g of segs) {
+        if (g.start > q) continue;
+        // Bright edge where light catches the fracture, dark core.
+        ctx.strokeStyle = 'rgba(230,245,250,0.85)';
+        ctx.lineWidth = g.w + 1.5;
+        ctx.beginPath();
+        ctx.moveTo(g.x0, g.y0);
+        ctx.lineTo(g.x1, g.y1);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(20,30,34,0.7)';
+        ctx.lineWidth = g.w * 0.45;
+        ctx.stroke();
+      }
+      if (q > 0.3) {
+        ctx.strokeStyle = 'rgba(220,240,245,0.6)';
+        ctx.lineWidth = 2;
+        for (const r of rings) {
+          ctx.beginPath();
+          ctx.arc(ix, iy, r * Math.min(1, q * 1.5), 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+      tex.needsUpdate = true;
+    },
+  };
 }
 
 export function buildPorthole(steel: THREE.Material, boltMat: THREE.Material): Porthole {
@@ -175,6 +246,15 @@ export function buildPorthole(steel: THREE.Material, boltMat: THREE.Material): P
   );
   glass.position.z = -0.004;
   group.add(glass);
+
+  const crack = crackPainter();
+  const crackMesh = new THREE.Mesh(
+    new THREE.CircleGeometry(R, 64),
+    new THREE.MeshBasicMaterial({ map: crack.tex, transparent: true, depthWrite: false, toneMapped: false }),
+  );
+  crackMesh.position.z = -0.002;
+  crackMesh.visible = false;
+  group.add(crackMesh);
 
   // Recessed sleeve through the hull, so the glass looks thick.
   const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.004, R + 0.004, 0.06, 64, 1, true), steel);
@@ -223,6 +303,10 @@ export function buildPorthole(steel: THREE.Material, boltMat: THREE.Material): P
     },
     setPresence(v) {
       uniforms.uPresence.value = v;
+    },
+    setCrack(p) {
+      crackMesh.visible = p > 0;
+      if (p > 0) crack.draw(p);
     },
   };
 }

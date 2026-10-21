@@ -79,6 +79,111 @@ export class Overlays {
     this.top.hidden = true;
   }
 
+  /** First tap: needed before any sound can play in a browser. */
+  async pressStart() {
+    const g = el('section', 'ov-start');
+    g.innerHTML = `
+      <div class="ov-start-inner">
+        <p class="ov-kicker">Helios Deep</p>
+        <button type="button" class="ov-btn ov-btn-primary" id="start-intro">Play intro</button>
+        <p class="ov-small">Sound on. Headphones if you have them.</p>
+      </div>`;
+    this.root.appendChild(g);
+    const btn = g.querySelector<HTMLButtonElement>('#start-intro')!;
+    btn.focus({ preventScroll: true });
+    await new Promise<void>((r) => btn.addEventListener('click', () => r(), { once: true }));
+    await audio.unlock();
+    g.classList.add('is-leaving');
+    await wait(400);
+    g.remove();
+  }
+
+  /** Black curtain over the scene, faded in or out. */
+  curtain(on: boolean, ms = 600) {
+    let c = this.root.querySelector<HTMLElement>('.ov-curtain');
+    if (!c) {
+      c = el('div', 'ov-curtain');
+      this.root.appendChild(c);
+    }
+    c.style.transitionDuration = `${ms}ms`;
+    requestAnimationFrame(() => c!.classList.toggle('is-on', on));
+  }
+
+  /** Full-screen white flash for the blast. */
+  flash() {
+    const f = el('div', 'ov-flash');
+    this.root.appendChild(f);
+    setTimeout(() => f.remove(), 900);
+  }
+
+  /** Skip control shown for the whole trailer. */
+  skip(onSkip: () => void) {
+    const b = el('button', 'ov-btn ov-skip', 'Skip intro') as HTMLButtonElement;
+    b.type = 'button';
+    b.addEventListener('click', () => onSkip(), { once: true });
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onSkip();
+    addEventListener('keydown', onKey);
+    this.root.appendChild(b);
+    return () => {
+      removeEventListener('keydown', onKey);
+      b.remove();
+    };
+  }
+
+  /** Trailer caption: a typed log line, or a large statement. */
+  async caption(text: string, kind: 'log' | 'big', ms: number) {
+    const c = el('p', `ov-caption is-${kind}`);
+    this.root.appendChild(c);
+    if (kind === 'log') await type(c, text, c, 34);
+    else c.textContent = text;
+    await wait(ms);
+    c.classList.add('is-leaving');
+    await wait(400);
+    c.remove();
+  }
+
+  /** The question the trailer ends on. */
+  async titleCard(): Promise<'begin' | 'replay'> {
+    const t = el('section', 'ov-title');
+    t.innerHTML = `
+      <div class="ov-title-inner">
+        <p class="ov-title-line">Five days until rescue.</p>
+        <h1 class="ov-title-q">Can you keep them alive?</h1>
+        <div class="ov-title-actions">
+          <button type="button" class="ov-btn ov-btn-primary" id="title-begin">Begin</button>
+          <button type="button" class="ov-btn" id="title-replay">Replay intro</button>
+        </div>
+      </div>`;
+    this.root.appendChild(t);
+    audio.play('hit');
+    const begin = t.querySelector<HTMLButtonElement>('#title-begin')!;
+    const replay = t.querySelector<HTMLButtonElement>('#title-replay')!;
+    const pick = await choose([begin, replay]);
+    t.classList.add('is-leaving');
+    await wait(400);
+    t.remove();
+    return pick === 0 ? 'begin' : 'replay';
+  }
+
+  /** Holding screen until the station and crew arrive in the next build. */
+  async comingNext(): Promise<'replay'> {
+    const t = el('section', 'ov-title');
+    t.innerHTML = `
+      <div class="ov-title-inner">
+        <p class="ov-kicker">Next build</p>
+        <p class="ov-title-line">The station, room by room. Then the crew.</p>
+        <p class="ov-small">This preview is the intro only.</p>
+        <div class="ov-title-actions">
+          <button type="button" class="ov-btn ov-btn-primary" id="next-replay">Replay intro</button>
+        </div>
+      </div>`;
+    this.root.appendChild(t);
+    const b = t.querySelector<HTMLButtonElement>('#next-replay')!;
+    await choose([b]);
+    t.remove();
+    return 'replay';
+  }
+
   /** Title screen. Doubles as the user gesture that unlocks audio. */
   async gate() {
     const g = el('section', 'ov-gate');

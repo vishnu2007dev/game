@@ -818,3 +818,129 @@
 .ov-end-theories .ov-btn {
   justify-self: start;
 }
+
+/* Trailer layer. */
+.ov-start {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--ov-gutter-r) 0 max(16px, 12vw);
+  background: #000;
+}
+
+.ov-start-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.ov-curtain {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition-property: opacity;
+  transition-timing-function: ease-in-out;
+}
+
+.ov-curtain.is-on {
+  opacity: 1;
+}
+
+.ov-flash {
+  position: fixed;
+  inset: 0;
+  background: #f4f8ff;
+  pointer-events: none;
+  animation: ov-flash 0.85s ease-out forwards;
+}
+
+@keyframes ov-flash {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.ov-skip {
+  position: fixed;
+  top: calc(14px + env(safe-area-inset-top, 0px));
+  right: var(--ov-gutter-r);
+  opacity: 0.75;
+}
+
+.ov-caption {
+  position: fixed;
+  left: max(16px, 8vw);
+  right: var(--ov-gutter-r);
+  margin: 0;
+  pointer-events: none;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.9);
+  animation: ov-fade 0.4s ease-out;
+}
+
+.ov-caption.is-log {
+  bottom: calc(12vh + env(safe-area-inset-bottom, 0px));
+  font: 500 clamp(14px, 1.8vw, 18px) / 1.5 var(--ov-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.ov-caption.is-big {
+  top: 50%;
+  transform: translateY(-50%);
+  font: 700 clamp(40px, 8vw, 104px) / 0.92 var(--ov-label);
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  max-width: 14ch;
+}
+
+.ov-title {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--ov-gutter-r) 0 max(16px, 8vw);
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.94), rgba(0, 0, 0, 0.7) 55%, rgba(0, 0, 0, 0.35));
+  animation: ov-fade 0.8s ease-out;
+}
+
+.ov-title-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+  max-width: 900px;
+}
+
+.ov-title-line {
+  margin: 0;
+  font: 500 clamp(18px, 2.4vw, 26px) / 1.2 var(--ov-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ov-amber);
+}
+
+.ov-title-q {
+  margin: 0;
+  font: 700 clamp(52px, 10vw, 132px) / 0.88 var(--ov-label);
+  text-transform: uppercase;
+  text-wrap: balance;
+}
+
+.ov-title-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.ov-title-actions .ov-btn-primary {
+  padding: 15px 28px;
+  font-size: 14px;
+}

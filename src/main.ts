@@ -9,7 +9,8 @@ import '@fontsource/caveat/700.css';
 import './styles/base.css';
 import './styles/overlays.css';
 import { startScene } from './scene/app';
-import { Director } from './game/director';
+import { Overlays } from './ui/overlays';
+import { playTrailer, smoulder, trailerStill } from './game/trailer';
 
 // Canvas text is drawn once into textures, so every face has to be
 // loaded before the scene is built.
@@ -27,4 +28,23 @@ const faces = [
 await Promise.all(faces.map((f) => document.fonts.load(f)));
 const root = document.getElementById('app')!;
 const station = startScene(root);
-new Director(station, root).run();
+(window as unknown as { __station: unknown }).__station = station;
+// v2 is built in steps. This step is the intro: trailer and title.
+// The v1 director (src/game/director.ts) stays in the repo for reuse.
+root.classList.add('is-cinematic');
+const ov = new Overlays(root);
+const still = new URLSearchParams(location.search).get('still');
+if (still) {
+  await trailerStill(station, still);
+  if (still === 'wreck') void ov.titleCard();
+  window.__STILL = true;
+  await new Promise(() => {});
+}
+await ov.pressStart();
+for (;;) {
+  await playTrailer(station, ov);
+  const stop = smoulder(station);
+  const pick = await ov.titleCard();
+  stop();
+  if (pick === 'begin') await ov.comingNext();
+}
