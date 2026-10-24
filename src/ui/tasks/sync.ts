@@ -84,7 +84,10 @@ export function syncTask(root: HTMLElement, opts: { title: string; instruction: 
     prev = now;
     const slip = gen - BUS;
     // One revolution per second per hertz of slip, as on a real synchroscope.
-    if (!done) angle += slip * Math.PI * 2 * dt;
+    // A perfect match would park the needle wherever it stopped, so it
+    // always creeps a little: like a real set run just off speed.
+    const creep = Math.sign(slip || 1) * Math.max(Math.abs(slip), 0.08);
+    if (!done) angle += creep * Math.PI * 2 * dt;
     flash = Math.max(0, flash - dt * 2);
     canvas.dataset.angle = String(Math.round((Math.atan2(Math.sin(angle), Math.cos(angle)) * 180) / Math.PI));
     canvas.dataset.slip = slip.toFixed(2);
