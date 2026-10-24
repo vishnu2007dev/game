@@ -19,13 +19,13 @@ export const DAY1_TASKS: TaskDef[] = [
     done: 'Nice hands, Commander. Tank is back in the green. I will make an engineer of you yet.',
   },
   {
-    id: 'rewire',
-    label: 'Rewire the junction box in Power',
+    id: 'sync',
+    label: 'Sync the backup generator in Power',
     room: 'power',
-    spot: 'junction',
-    kind: 'rewire',
+    spot: 'sync',
+    kind: 'sync',
     by: 'rook',
-    done: 'Lights did not even flicker. Better than the last commander. He blacked out the whole lower deck once.',
+    done: 'Clean close. The last commander slammed it in out of phase and blew every fuse on the lower deck.',
   },
   {
     id: 'keypad',

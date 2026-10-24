@@ -2017,3 +2017,38 @@
     animation: none;
   }
 }
+
+.tk-breaker {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 16px;
+  color: #fff;
+  background: #8e1c15;
+  border: 0;
+  border-bottom: 4px solid #5a110c;
+  border-radius: 0;
+  font: 600 15px/1 var(--ov-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.tk-breaker:hover {
+  background: var(--ov-red);
+}
+
+.tk-breaker:active {
+  transform: translateY(2px);
+  border-bottom-width: 2px;
+}
+
+.tk-breaker:disabled {
+  background: #1f5a33;
+  border-bottom-color: #133a21;
+}
+
+.tk-breaker:focus-visible {
+  outline: 2px solid var(--ov-amber);
+  outline-offset: 2px;
+}

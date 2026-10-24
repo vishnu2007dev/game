@@ -149,7 +149,7 @@ export interface Hotspot {
 /** Named places on props where tasks happen. */
 export const SPOTS = {
   valve: new THREE.Vector3(-WALL_X - 0.32, 1.25, -2.2),
-  junction: new THREE.Vector3(-0.9, 1.95, -3.86),
+  sync: new THREE.Vector3(-0.9, 1.95, -3.86),
   keypad: new THREE.Vector3(4.55, 1.45, -3.9),
   pipe: new THREE.Vector3(-6.4, 2.38, -3.25),
 };
@@ -1001,10 +1001,17 @@ function furnish(
   for (let y = 0.3; y < UPPER.floor + 0.9; y += 0.3) add(box(0.44, 0.03, 0.03, m.steel, v(ladderX, y, TRUNK.z0 + 0.25), 0.01));
   add(box(TRUNK.x1 - TRUNK.x0 + 0.1, 0.1, 0.08, safety, v(ladderX, U + 0.05, TRUNK.z1), 0.01));
 
-  // Junction box in Power and the moon pool gate keypad in the dive bay.
-  add(box(0.55, 0.45, 0.14, new THREE.MeshStandardMaterial({ color: 0x8c9196, roughness: 0.5, metalness: 0.4 }), v(SPOTS.junction.x, SPOTS.junction.y, zb + 0.07), 0.02));
-  add(box(0.06, 0.6, 0.06, m.black, v(SPOTS.junction.x + 0.18, SPOTS.junction.y + 0.5, zb + 0.06), 0.01));
-  add(box(0.06, 0.6, 0.06, m.black, v(SPOTS.junction.x - 0.18, SPOTS.junction.y + 0.5, zb + 0.06), 0.01));
+  // Generator control panel in Power, with its synchroscope and breaker
+  // handle, and the moon pool gate keypad in the dive bay.
+  add(box(0.6, 0.5, 0.14, m.enamel, v(SPOTS.sync.x, SPOTS.sync.y, zb + 0.07), 0.02));
+  const syncFace = new THREE.Mesh(new THREE.CircleGeometry(0.11, 32), new THREE.MeshStandardMaterial({ color: 0x0a0d0f, roughness: 0.3 }));
+  syncFace.position.set(SPOTS.sync.x - 0.1, SPOTS.sync.y + 0.03, zb + 0.142);
+  scene.add(syncFace);
+  const window_ = new THREE.Mesh(new THREE.RingGeometry(0.075, 0.095, 16, 1, Math.PI / 2 - 0.3, 0.6), glow(0x37d36b, 2));
+  window_.position.set(SPOTS.sync.x - 0.1, SPOTS.sync.y + 0.03, zb + 0.143);
+  scene.add(window_);
+  add(box(0.05, 0.16, 0.05, red, v(SPOTS.sync.x + 0.17, SPOTS.sync.y - 0.02, zb + 0.17), 0.01));
+  add(pipe(v(SPOTS.sync.x + 0.2, SPOTS.sync.y + 0.25, zb + 0.06), v(SPOTS.sync.x + 0.2, LOWER.ceil - 0.2, zb + 0.06), 0.025, m.black));
   add(box(0.24, 0.32, 0.05, m.black, v(SPOTS.keypad.x, SPOTS.keypad.y, zb + 0.03), 0.01));
   const pad = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.2), new THREE.MeshStandardMaterial({ color: 0x0a0a0a, emissive: 0x2a7a50, emissiveIntensity: 0.6 }));
   pad.position.set(SPOTS.keypad.x, SPOTS.keypad.y - 0.02, zb + 0.056);

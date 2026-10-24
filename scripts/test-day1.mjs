@@ -55,24 +55,32 @@ await p.mouse.up();
 await p.waitForSelector('.tk', { state: 'detached', timeout: 30000 });
 console.log('valve done', await p.locator('.ob-count').textContent());
 
-// 2. Rewire in Power: try each wire on each terminal.
-await until('rewire', () => tapSpot('junction'), () => p.locator('.tk').isVisible());
+// 2. Generator sync in Power: trim the governor, then close in phase.
+await until('sync', () => tapSpot('sync'), () => p.locator('.tk').isVisible());
 box = await canvasBox();
-for (let wire = 0; wire < 4; wire++) {
-  for (let slot = 0; slot < 4; slot++) {
-    const from = toPage(box, 70, 60 + wire * 60);
-    const to = toPage(box, 450, 60 + slot * 60);
-    await p.mouse.move(from.x, from.y);
-    await p.mouse.down();
-    await p.mouse.move(to.x, to.y, { steps: 6 });
-    await p.mouse.up();
-    await p.waitForTimeout(150);
-    if ((await status()).includes('connected') || (await status()).includes('All four')) break;
-  }
+const knob = toPage(box, 400, 112);
+const read = (k) => p.locator('.tk-canvas').getAttribute(`data-${k}`).then(Number);
+for (let i = 0; i < 12; i++) {
+  const slip = await read('slip');
+  if (Math.abs(slip) < 0.1) break;
+  // Drag down to slow the generator: 80 canvas px per hertz.
+  const dy = (slip * 80 * box.height) / 300;
+  await p.mouse.move(knob.x, knob.y);
+  await p.mouse.down();
+  await p.mouse.move(knob.x, knob.y + dy, { steps: 4 });
+  await p.mouse.up();
+  await p.evaluate(() => new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok))));
 }
-await shot('rewire');
-await p.waitForSelector('.tk', { state: 'detached', timeout: 30000 });
-console.log('rewire done', await p.locator('.ob-count').textContent());
+await shot('sync');
+for (let i = 0; i < 400; i++) {
+  if (Math.abs(await read('angle')) < 12) {
+    await p.locator('.tk-breaker').click();
+    break;
+  }
+  await p.waitForTimeout(50);
+}
+await p.waitForSelector('.tk', { state: 'detached', timeout: 60000 });
+console.log('sync done', await p.locator('.ob-count').textContent());
 
 // 3. Call Teo for the gate code, then the keypad.
 const callRow = async (i) => {

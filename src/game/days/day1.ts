@@ -3,7 +3,7 @@ import { DAY1_TASKS, DAY1_CHATS, DAY1_SMALLTALK, BUSY, DAY1_OPEN, NIGHT1 } from 
 import { SPOTS } from '../../scene/station';
 import { say, rescueIn, type CrewKey } from '../../engine/crisis';
 import { valveTask } from '../../ui/tasks/valve';
-import { rewireTask } from '../../ui/tasks/rewire';
+import { syncTask } from '../../ui/tasks/sync';
 import { keypadTask } from '../../ui/tasks/keypad';
 import { audio } from '../../audio/audio';
 import { wait } from '../../ui/overlays';
@@ -57,8 +57,12 @@ export async function day1(ctx: Ctx) {
       let r;
       if (task.kind === 'valve') {
         r = await valveTask(ctx.root, { title: 'Trim tank 2', instruction: 'Bleed the tank into the green band, then let go.' });
-      } else if (task.kind === 'rewire') {
-        r = await rewireTask(ctx.root, { title: 'Junction box J4', instruction: 'Match each wire to its terminal.', seed: ctx.state.seed });
+      } else if (task.kind === 'sync') {
+        r = await syncTask(ctx.root, {
+          title: 'Backup generator',
+          instruction: 'Match the generator to the station bus, then close the breaker in phase.',
+          seed: ctx.state.seed,
+        });
       } else {
         r = await keypadTask(ctx.root, {
           title: 'Moon pool gate',

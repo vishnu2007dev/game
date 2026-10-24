@@ -34,7 +34,7 @@ export interface TaskDef {
   room: string;
   /** Hotspot to tap. */
   spot: string;
-  kind: 'valve' | 'rewire' | 'keypad' | 'call';
+  kind: 'valve' | 'sync' | 'keypad' | 'call';
   /** Who is nearby, and what they say on the radio once it is done. */
   by: CrewKey;
   done: Line;
