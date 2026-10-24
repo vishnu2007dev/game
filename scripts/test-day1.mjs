@@ -60,24 +60,30 @@ await until('sync', () => tapSpot('sync'), () => p.locator('.tk').isVisible());
 box = await canvasBox();
 const knob = toPage(box, 400, 112);
 const read = (k) => p.locator('.tk-canvas').getAttribute(`data-${k}`).then(Number);
-for (let i = 0; i < 12; i++) {
+const frame = () => p.evaluate(() => new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok))));
+let shotTaken = false;
+for (let tries = 0; tries < 60 && (await p.locator('.tk-canvas').count()); tries++) {
   const slip = await read('slip');
-  if (Math.abs(slip) < 0.1) break;
-  // Drag down to slow the generator: 80 canvas px per hertz.
-  const dy = (slip * 80 * box.height) / 300;
-  await p.mouse.move(knob.x, knob.y);
-  await p.mouse.down();
-  await p.mouse.move(knob.x, knob.y + dy, { steps: 4 });
-  await p.mouse.up();
-  await p.evaluate(() => new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok))));
-}
-await shot('sync');
-for (let i = 0; i < 400; i++) {
-  if (Math.abs(await read('angle')) < 12) {
-    await p.locator('.tk-breaker').click();
-    break;
+  if (Math.abs(slip) >= 0.1) {
+    // Drag down to slow the generator: 80 canvas px per hertz.
+    const dy = (slip * 80 * box.height) / 300;
+    await p.mouse.move(knob.x, knob.y);
+    await p.mouse.down();
+    await p.mouse.move(knob.x, knob.y + dy, { steps: 4 });
+    await p.mouse.up();
+    await frame();
+    continue;
   }
-  await p.waitForTimeout(50);
+  if (!shotTaken) {
+    await shot('sync');
+    shotTaken = true;
+  }
+  const angle = await read('angle');
+  console.log('sync try', tries, 'slip', slip, 'angle', angle);
+  if (Math.abs(angle) < 12) {
+    await p.locator('.tk-breaker').click();
+    await p.waitForTimeout(1500);
+  } else await frame();
 }
 await p.waitForSelector('.tk', { state: 'detached', timeout: 60000 });
 console.log('sync done', await p.locator('.ob-count').textContent());

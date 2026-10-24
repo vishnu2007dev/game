@@ -130,7 +130,7 @@ export function syncTask(root: HTMLElement, opts: { title: string; instruction: 
     ctx.textAlign = 'center';
     ctx.fillText('SLOW', scope.x - 62, scope.y + 4);
     ctx.fillText('FAST', scope.x + 62, scope.y + 4);
-    ctx.fillText('SYNCHROSCOPE', scope.x, scope.y + 54);
+    ctx.fillText('SYNCHROSCOPE', scope.x, scope.y + scope.r + 18);
     // Needle.
     const na = angle - Math.PI / 2;
     ctx.strokeStyle = flash ? INK.bad : INK.text;
