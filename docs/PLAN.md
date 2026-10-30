@@ -32,10 +32,16 @@ Code on a laptop. `CLAUDE.md` has the code map and house rules;
    flags, the seeded liar and gate code.
 
 ## State of testing
-`npm run build` and `npm test` (52 tests) pass. `npm run e2e:day1`
-plays the story Day 1 end to end; it was rewritten for the story version
-and its first full run was still going when the cloud session ended, so
-**run it first** and fix anything it finds before building Day 2.
+`npm run build`, `npm test` (52 tests) and `npm run e2e:day1` all pass:
+the browser test plays the story Day 1 end to end through to the night
+log. The story Day 1 is also on the old private preview link.
+
+Known polish items for Day 1 (small, do them first or alongside Day 2):
+- In one person scenes the speaker turns side on to the camera; they
+  should face the camera (see `faceEachOther` in `src/game/story.ts`).
+- At the evening meal Teo's mark puts him in front of the others,
+  blocking them; spread the `DINNER.marks` in `src/content/v2/day1.ts`
+  into a loose arc facing the camera.
 
 ## Next: Day 2, "The burst", with real branches
 The owner chose real branches: big choices change what happens next.
