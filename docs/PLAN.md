@@ -1,23 +1,115 @@
 # Status and next step
 
-Read this first when picking the project up in a new chat.
+Read this first when picking the project up, in a new chat or in Claude
+Code on a laptop. `CLAUDE.md` has the code map and house rules;
+`README.md` has setup.
 
-- **Repo branch:** `claude/confident-dijkstra-3xyum0`
-- **Private preview link (owner's claude.ai account):** https://claude.ai/artifact/NHsUjhV9aKiV5tjWyV1ZC5
-  To update it, run `node scripts/artifact-build.mjs <out-dir>`, then publish `<out-dir>/index.html` to that URL with the changed `assets/*` files.
-- **Done:**
-  - realistic control room
-  - readable HMI screens with click-to-zoom
-  - v1 preview (cold open, days 1 to 3 as calls), which the owner found too quiz-like
-  - engine with tests
-  - synthesized sound
-  - automated playthrough script
-- **Now:** steps 1 and 2 are built and published. Step 2 is the station cutaway (`src/scene/station.ts`), the suited crew on the CC0 Quaternius mannequin (`src/scene/crew.ts`, licence in `CREDITS.md`), room fly-in, crew cards (`src/ui/stationHud.ts`) and the control room as the Command room. Open `?station` to skip the intro. The preview host does not serve `.glb`, so `scripts/artifact-build.mjs` packs models as base64 `.json` (`VITE_PACKED_MODELS=1`). Checks: `scripts/shot-station.mjs`, `scripts/test-station.mjs` (add `&snap` to skip camera easing). After feedback the station was rebuilt larger (rooms 5.4 x 3 m, hatched section cut, services in the hull gaps, outside legs, drill and umbilical; textures in `src/scene/panels.ts`) and the crew were reworked into padded suits with helmets, faces behind visors, boots, belts and packs. `crewlab.html` on the dev server shows the crew up close (`scripts/shot-crewlab.mjs`). Step 3 is done too: after Begin, first-time players meet each crew member in close-up (`src/game/onboarding.ts`, typed card in `src/ui/stationHud.ts`), then a five-step tutorial that waits for real actions (`src/ui/coach.ts`): tap a room, go back, use the crew list (`src/ui/roster.ts`), sit at the desk, read a screen. Remembered in localStorage `helios.onboarded`; `?tutorial` forces it. Test: `scripts/test-onboarding.mjs [base] [w] [h]`. Step 4 is split in two. **4a (Day 1) is done**: run engine `src/engine/crisis.ts` (+ tests), doors, task markers, night dimming, live suit camera in calls (`faceCam` in `src/scene/app.ts`), chat `src/ui/chat.ts`, checklist `src/ui/objectives.ts`, tasks in `src/ui/tasks/` (valve, generator sync, keypad; the wire task was dropped as too close to Among Us), content `src/content/v2/day1.ts`, flow `src/game/days/day1.ts` and `src/game/run.ts`. Test: `scripts/test-day1.mjs` (passes end to end), `scripts/shot-calls.mjs`. Dev pages: `crewlab.html`, `tasklab.html`. Next is **4b: Day 2** (the burst in Ballast, water rising, seal doors, who to call and send, patch task, exposure, Night 2), as planned in the step 4 plan.
-- **Checks:** `npm run build`, `npm test`, `node scripts/playthrough.mjs <url>` (needs `npx vite preview --port 4173`).
-- **House rules:**
-  - no em or en dashes anywhere (the build fails on them)
-  - nothing that looks AI-generated (see the anti-vibecode rules)
-  - the owner wants realistic, cinematic, interactive
+- **Branch:** `claude/confident-dijkstra-3xyum0` on
+  https://github.com/vishnu2007dev/game
+- **Old private preview** (owner's claude.ai account, built by the cloud
+  sessions): https://claude.ai/artifact/NHsUjhV9aKiV5tjWyV1ZC5.
+  Locally, just use `npm run dev`.
+
+## Done
+1. **Trailer and title** (`src/game/trailer.ts`): the control room
+   failing, then "Five days until rescue. Can you keep them alive?"
+2. **Station and crew** (`src/scene/station.ts`, `src/scene/crew.ts`):
+   two deck cutaway, six rooms, doors, props, outside (legs, drill,
+   umbilical), five suited crew who walk and work. Command opens the
+   detailed control room.
+3. **Meet the crew and tutorial** (`src/game/onboarding.ts`).
+4. **Day 1 as a story** (`src/game/days/day1.ts`,
+   `src/content/v2/day1.ts`): Mara calls you to Ballast (valve job),
+   sends you to Rook in Power (generator sync job), who sends you to Teo
+   in the Dive Bay (he says the gate code, keypad job), who sends you to
+   Hana in the Lab (the cores "smell like the sea"). Evening meal in
+   Quarters with all five, one thing to say. Night: three knocks on the
+   hull, night log with two clues.
+   Built on the story layer: `src/game/story.ts` (scenes), subtitles,
+   crew orders and routes, the scene camera, the "Now:" line. Calls with
+   a live suit camera at any time (`runChat`, small talk once each).
+   Engine `src/engine/crisis.ts` tracks trust, exposure, water, doors,
+   flags, the seeded liar and gate code.
+
+## State of testing
+`npm run build` and `npm test` (52 tests) pass. `npm run e2e:day1`
+plays the story Day 1 end to end; it was rewritten for the story version
+and its first full run was still going when the cloud session ended, so
+**run it first** and fix anything it finds before building Day 2.
+
+## Next: Day 2, "The burst", with real branches
+The owner chose real branches: big choices change what happens next.
+Same tools as Day 1 (scenes, calls, doors, jobs), plus:
+
+**Scene additions** (`station.ts`, exposed in `app.ts`):
+- `setWater(room, level)`: translucent water volumes rising in rooms;
+  spread through open doors with `spread()` from `crisis.ts`.
+- `setAlarm(room)`: red pulsing room light and beacon.
+- Spray at `SPOTS.pipe` with a second `new Fx()` (`src/scene/fx.ts`)
+  added to the world scene.
+- Diving through the moon pool: crew sink out of sight and come back.
+
+**New job** `src/ui/tasks/patch.ts`: hold to press a clamp onto the
+burst pipe, release on each pressure surge, three surges, while the
+person in the water struggles on their suit camera (`faceCam`).
+
+**Beats:**
+1. Morning, Lab: Hana and Mara argue about the cores and the knock. Cut
+   in: side with Hana, side with Mara, or stay out (trust).
+2. Teo asks to dive and look at the hull.
+   - Let him dive: he goes down the moon pool, radios "marks on the
+     hull, like something was pulling". He is outside when the burst
+     hits and comes back late (exposure +1), and saw something move in
+     the intake (clue).
+   - Keep everyone in: Teo sulks (trust -1), Hana pushes for an outside
+     sample.
+3. The burst: Mara is at the trim tank. The pipe ruptures: alarm, spray,
+   water rising live, Mara knocked down (`Hit_Chest`). Countdown banner
+   (`ov.emergency`).
+4. The door choice, made with the real door lamp or desk switch:
+   - Seal C2 now: Mara trapped inside, flood contained, Mara exposure
+     +2. With trust she says "Do it. Seal it."; without, she pounds on
+     the door.
+   - Wait (timer runs out with the door open): Mara gets out, water
+     spreads into Power (power -15, Rook exposure +1 if there), Mara
+     exposure +1.
+5. The fix:
+   - Mara trapped: she calls you from inside, out of breath, "Talk me
+     through it", and you do the patch job together. Rook offers to cut
+     the pumps (costs power, easier patch).
+   - Mara out: someone must go in. Advice by call: Mara insists though
+     hurt; Rook says cut pumps first; Teo volunteers if inside; Hana
+     wants a sample; Ilya refuses, "the water smells wrong" (clue). You
+     choose; they walk there through open doors; patch job; exposure +2
+     (Teo +1 in his sealed suit).
+6. Aftermath: room drains. Ilya asks to check everyone who touched the
+   water (flag `checkups`, costs morale). If Hana was not sent she asks
+   to sample the drained room: allow (Hana exposure +1, flag
+   `hana_sample`) or refuse (trust).
+7. Evening in Quarters, mood by branch: Mara grateful or furious, Teo
+   shaken if he dove, jokes that fall flat.
+8. Night 2: CCTV shows the most exposed person standing alone in the
+   drained Ballast at 02:14 staring at the pipe; knocks again, this time
+   from inside the ballast tank; night log; then a "Day 3 next" card.
+
+**Code:** `src/content/v2/day2.ts`, `src/game/days/day2.ts`;
+`src/main.ts` runs Day 1 then Day 2 and supports `?day=2`. Add engine
+tests that apply each branch's effects (Mara trapped: Mara exposure 2,
+no water in Power; Mara out: water in Power, power lower; Teo dove: Teo
+exposure at least 1), and `scripts/test-day2.mjs` with three branch
+runs.
+
+## After Day 2 (from the original plan)
+- Day 3: the liar (seeded in `state.liar`) misleads in calls; CCTV
+  scrubbing; lock up or confront.
+- Day 4 and 5: the exposed turn into the Drowned; containment with
+  doors and lights; escape to the rescue sub.
+- Endings, reveal, share card, sound pass, phone tuning, launch.
+
+## House rules
+- No em or en dashes anywhere (the build fails on them).
+- Nothing that looks AI-generated; realistic, cinematic, industrial.
+- A story, not a checklist. Similar to Among Us in spirit, never a copy.
 
 ---
 

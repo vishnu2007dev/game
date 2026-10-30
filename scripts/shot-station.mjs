@@ -1,13 +1,13 @@
 // Station view checks: overview and a few rooms. node scripts/shot-station.mjs [base] [w] [h] [rooms]
-import { chromium } from 'playwright-core';
-import { mkdirSync, globSync } from 'node:fs';
+import { launchBrowser } from './browser.mjs';
+import { mkdirSync } from 'node:fs';
 const base = process.argv[2] ?? 'http://localhost:4173/';
 const w = Number(process.argv[3] ?? 1440);
 const h = Number(process.argv[4] ?? 900);
 const rooms = (process.argv[5] ?? 'ballast,lab').split(',').filter(Boolean);
 const tag = w < 700 ? 'phone' : 'desk';
 mkdirSync('screenshots/station', { recursive: true });
-const b = await chromium.launch({ executablePath: globSync('/opt/pw-browsers/chromium-*/chrome-linux/chrome')[0], args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const b = await launchBrowser();
 const p = await b.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: w < 700 ? 2 : 1 });
 p.on('pageerror', (e) => console.log('PAGEERROR', e.message));
 p.on('console', (m) => m.type() === 'error' && console.log('CONSOLE', m.text()));

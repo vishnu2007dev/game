@@ -1,10 +1,10 @@
 // Screenshots of the crew lab page. node scripts/shot-crewlab.mjs <name> "<query>"
-import { chromium } from 'playwright-core';
-import { mkdirSync, globSync } from 'node:fs';
+import { launchBrowser } from './browser.mjs';
+import { mkdirSync } from 'node:fs';
 const name = process.argv[2] ?? 'lineup';
 const query = process.argv[3] ?? '';
 mkdirSync('screenshots/crew', { recursive: true });
-const b = await chromium.launch({ executablePath: globSync('/opt/pw-browsers/chromium-*/chrome-linux/chrome')[0], args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const b = await launchBrowser();
 const p = await b.newPage({ viewport: { width: 1280, height: 720 } });
 p.on('pageerror', (e) => console.log('PAGEERROR', e.message));
 p.on('console', (m) => m.type() === 'error' && console.log('CONSOLE', m.text()));

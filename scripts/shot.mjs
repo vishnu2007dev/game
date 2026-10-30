@@ -1,21 +1,13 @@
 // Usage: node scripts/shot.mjs [url]
 // Captures desktop and mobile screenshots of the app once window.__READY is true.
-import { chromium } from 'playwright-core';
-import { mkdirSync, globSync } from 'node:fs';
+import { launchBrowser } from './browser.mjs';
+import { mkdirSync } from 'node:fs';
 
 const url = process.argv[2] ?? 'http://localhost:5173/';
-const executablePath = globSync('/opt/pw-browsers/chromium-*/chrome-linux/chrome')[0];
-if (!executablePath) throw new Error('chromium binary not found under /opt/pw-browsers');
 
-const launchArgs = [
-  '--use-gl=angle',
-  '--use-angle=swiftshader',
-  '--enable-unsafe-swiftshader',
-  '--ignore-gpu-blocklist',
-];
 
 mkdirSync('screenshots', { recursive: true });
-const browser = await chromium.launch({ executablePath, args: launchArgs });
+const browser = await launchBrowser();
 
 async function capture(name, opts) {
   const context = await browser.newContext(opts.context);

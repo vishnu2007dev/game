@@ -9,7 +9,9 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "shot": "node scripts/shot.mjs",
-    "check:dashes": "node scripts/check-dashes.mjs"
+    "check:dashes": "node scripts/check-dashes.mjs",
+    "e2e:day1": "node scripts/test-day1.mjs http://localhost:4173/",
+    "e2e:onboarding": "node scripts/test-onboarding.mjs http://localhost:4173/"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "5.3.0",
@@ -28,5 +30,8 @@
     "typescript": "7.0.2",
     "vite": "8.3.4",
     "vitest": "5.0.5"
+  },
+  "engines": {
+    "node": ">=20.19"
   }
 }

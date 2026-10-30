@@ -1,14 +1,10 @@
 // Screenshots of the desk after leaning in to a screen with a number key.
-import { chromium } from 'playwright-core';
-import { mkdirSync, globSync } from 'node:fs';
+import { launchBrowser } from './browser.mjs';
+import { mkdirSync } from 'node:fs';
 
 const url = process.argv[2] ?? 'http://localhost:5173/';
-const executablePath = globSync('/opt/pw-browsers/chromium-*/chrome-linux/chrome')[0];
 mkdirSync('screenshots', { recursive: true });
-const browser = await chromium.launch({
-  executablePath,
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
-});
+const browser = await launchBrowser();
 async function capture(name, key, context) {
   const ctx = await browser.newContext(context);
   const page = await ctx.newPage();

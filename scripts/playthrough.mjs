@@ -1,18 +1,14 @@
 // Plays the whole preview automatically and screenshots each phase.
 // Usage: node scripts/playthrough.mjs [url] [width] [height]
-import { chromium } from 'playwright-core';
-import { mkdirSync, globSync } from 'node:fs';
+import { launchBrowser } from './browser.mjs';
+import { mkdirSync } from 'node:fs';
 
 const url = process.argv[2] ?? 'http://localhost:5173/?seed=7';
 const width = Number(process.argv[3] ?? 1440);
 const height = Number(process.argv[4] ?? 900);
 const tag = width < 700 ? 'phone' : 'desk';
-const executablePath = globSync('/opt/pw-browsers/chromium-*/chrome-linux/chrome')[0];
 mkdirSync('screenshots/play', { recursive: true });
-const browser = await chromium.launch({
-  executablePath,
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'],
-});
+const browser = await launchBrowser();
 const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: width < 700 ? 2 : 1 });
 const errors = [];
 page.on('pageerror', (e) => { errors.push(e.message); console.log('PAGEERROR', e.message); });

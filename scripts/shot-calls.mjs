@@ -1,12 +1,12 @@
 // Phone or desktop shots of a call and a task panel. node scripts/shot-calls.mjs [base] [w] [h]
-import { chromium } from 'playwright-core';
-import { mkdirSync, globSync } from 'node:fs';
+import { launchBrowser } from './browser.mjs';
+import { mkdirSync } from 'node:fs';
 const base = process.argv[2] ?? 'http://localhost:4173/';
 const w = Number(process.argv[3] ?? 390);
 const h = Number(process.argv[4] ?? 844);
 const tag = w < 700 ? 'phone' : 'desk';
 mkdirSync('screenshots/day1', { recursive: true });
-const b = await chromium.launch({ executablePath: globSync('/opt/pw-browsers/chromium-*/chrome-linux/chrome')[0], args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const b = await launchBrowser();
 const p = await b.newPage({ viewport: { width: w, height: h }, hasTouch: w < 700 });
 p.on('pageerror', (e) => console.log('PAGEERROR', e.message));
 await p.addInitScript(() => localStorage.setItem('helios.onboarded', '1'));

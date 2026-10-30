@@ -1,9 +1,8 @@
 // Clicks through the intro: start, skip, title, begin, replay. Fails on page errors.
-import { chromium } from 'playwright-core';
-import { globSync } from 'node:fs';
+import { launchBrowser } from './browser.mjs';
 const url = process.argv[2] ?? 'http://localhost:4173/';
 const full = process.argv[3] === 'full';
-const b = await chromium.launch({ executablePath: globSync('/opt/pw-browsers/chromium-*/chrome-linux/chrome')[0], args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'] });
+const b = await launchBrowser(['--autoplay-policy=no-user-gesture-required']);
 const p = await b.newPage({ viewport: { width: 960, height: 600 } });
 const errors = [];
 p.on('pageerror', (e) => errors.push(e.message));

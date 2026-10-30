@@ -1,13 +1,13 @@
 // Plays the Day 1 story the way a player would: every scene, every job, the evening, the night.
 // node scripts/test-day1.mjs [base] [w] [h]
-import { chromium } from 'playwright-core';
-import { mkdirSync, globSync } from 'node:fs';
+import { launchBrowser } from './browser.mjs';
+import { mkdirSync } from 'node:fs';
 const base = process.argv[2] ?? 'http://localhost:4173/';
 const w = Number(process.argv[3] ?? 1440);
 const h = Number(process.argv[4] ?? 900);
 const tag = w < 700 ? 'phone' : 'desk';
 mkdirSync('screenshots/day1', { recursive: true });
-const b = await chromium.launch({ executablePath: globSync('/opt/pw-browsers/chromium-*/chrome-linux/chrome')[0], args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const b = await launchBrowser();
 const p = await b.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: 1, hasTouch: w < 700 });
 p.on('pageerror', (e) => console.log('PAGEERROR', e.message));
 const shot = (name) => p.screenshot({ path: `screenshots/day1/${tag}-${name}.png`, timeout: 300000 });

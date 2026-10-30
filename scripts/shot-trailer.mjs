@@ -1,6 +1,6 @@
 // Captures frames across the intro trailer and the title card.
-import { chromium } from 'playwright-core';
-import { mkdirSync, globSync, rmSync } from 'node:fs';
+import { launchBrowser } from './browser.mjs';
+import { mkdirSync, rmSync } from 'node:fs';
 
 const url = process.argv[2] ?? 'http://localhost:4173/';
 const width = Number(process.argv[3] ?? 1440);
@@ -8,10 +8,7 @@ const height = Number(process.argv[4] ?? 900);
 const dir = 'screenshots/trailer';
 rmSync(dir, { recursive: true, force: true });
 mkdirSync(dir, { recursive: true });
-const browser = await chromium.launch({
-  executablePath: globSync('/opt/pw-browsers/chromium-*/chrome-linux/chrome')[0],
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'],
-});
+const browser = await launchBrowser();
 const page = await browser.newPage({ viewport: { width, height } });
 page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
 await page.goto(url);

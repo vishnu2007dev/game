@@ -1,8 +1,7 @@
 // Station interaction check: tap a crew member, then fly into Command and sit at the desk.
-import { chromium } from 'playwright-core';
-import { globSync } from 'node:fs';
+import { launchBrowser } from './browser.mjs';
 const base = process.argv[2] ?? 'http://localhost:4173/';
-const b = await chromium.launch({ executablePath: globSync('/opt/pw-browsers/chromium-*/chrome-linux/chrome')[0], args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const b = await launchBrowser();
 const p = await b.newPage({ viewport: { width: 1440, height: 900 } });
 p.on('pageerror', (e) => console.log('PAGEERROR', e.message));
 await p.goto(`${base}?station&snap`);
