@@ -52,6 +52,22 @@ export class Objectives {
     return this.items.length > 0 && this.items.every((i) => i.done);
   }
 
+  /** One line telling the player what to do next, instead of a list. */
+  now(text: string) {
+    this.title.textContent = 'Now';
+    this.count.textContent = '';
+    this.list.innerHTML = '';
+    const li = el('li', 'ob-item is-next ob-now');
+    li.append(el('span', 'ob-label', text));
+    this.list.appendChild(li);
+    this.items = [];
+    this.el.hidden = false;
+    this.el.classList.remove('is-in');
+    void this.el.offsetWidth;
+    this.el.classList.add('is-in');
+    audio.play('confirm', { volume: 0.3 });
+  }
+
   hide() {
     this.el.hidden = true;
   }

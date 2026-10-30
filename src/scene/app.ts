@@ -7,7 +7,7 @@ import { Tweens, ease } from './tween';
 import { flapTexture } from './decals';
 import { audio } from '../audio/audio';
 import { Fx } from './fx';
-import { buildStation, type CrewDef, type RoomDef, type Hotspot } from './station';
+import { buildStation, type CrewDef, type RoomDef, type Hotspot, type Station as StationWorld } from './station';
 import type { DoorKey } from '../engine/crisis';
 import { glitch, dead } from '../hmi/glitch';
 import { buildPost } from './post';
@@ -70,6 +70,14 @@ export interface Station {
   hotspotPoint(id: string): { x: number; y: number; visible: boolean };
   setDoor(id: DoorKey, closed: boolean): void;
   setHotspots(spots: Hotspot[]): void;
+  /** Story scenes: walk crew, set what they do, and frame a group with the camera. */
+  sendCrew: StationWorld['sendCrew'];
+  act: StationWorld['act'];
+  release: StationWorld['release'];
+  crewAt: StationWorld['crewAt'];
+  placeCrew: StationWorld['placeCrew'];
+  /** Point the camera at these crew until called with null; follows them as they move. */
+  frameCast(ids: string[] | null): void;
   /** Live suit camera on one crew member, drawn into the element's box; null turns it off. */
   faceCam(id: string | null, frame?: HTMLElement): void;
   /** Switch to the detailed control room scene. */
@@ -189,6 +197,8 @@ export function startScene(root: HTMLElement): Station {
   let stationRoom: string | null = null;
   /** Crew member the camera is closed up on, if any. */
   let stationCrew: string | null = null;
+  /** Crew a story scene is framing, if any. */
+  let cast: string[] | null = null;
   let panX = 0;
   const snapCamera = new URLSearchParams(location.search).has('snap');
   const stationCam = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 34, started: false };
@@ -208,6 +218,8 @@ export function startScene(root: HTMLElement): Station {
     return null;
   };
   const stationTap = (x: number, y: number) => {
+    // During a story scene a tap only moves the subtitles on.
+    if (cast) return;
     const hit = stationPick(x, y);
     if (hit?.door) return station.onStation({ type: 'door', id: hit.door });
     if (hit?.spot) return station.onStation({ type: 'hotspot', id: hit.spot });
@@ -511,6 +523,7 @@ export function startScene(root: HTMLElement): Station {
       view = 'station';
       stationRoom = roomId ?? null;
       stationCrew = null;
+      cast = null;
       world.hold(null);
       // Screenshot runs cut straight to the new framing.
       if (snapCamera) stationCam.started = false;
@@ -531,11 +544,29 @@ export function startScene(root: HTMLElement): Station {
       cine = null;
       stationRoom = c.def.home;
       stationCrew = id;
+      cast = null;
       if (snapCamera) stationCam.started = false;
       world.hold(id);
       station.onStation({ type: 'crew', crew: c.def });
     },
     setDoor: (id, closed) => world.setDoor(id, closed),
+    sendCrew: (id, to) => world.sendCrew(id, to),
+    act: (id, clip, face) => world.act(id, clip, face),
+    release: (id) => world.release(id),
+    crewAt: (id) => world.crewAt(id),
+    placeCrew: (id, to) => world.placeCrew(id, to),
+    frameCast(ids) {
+      cast = ids;
+      if (ids) {
+        view = 'station';
+        renderPass.mainScene = world.scene;
+        camera.near = 0.08;
+        camera.updateProjectionMatrix();
+        cine = null;
+        world.hold(null);
+        stationCrew = null;
+      }
+    },
     faceCam(id, frame) {
       cam = id && frame ? { id, frame } : null;
       world.hold(id ?? stationCrew);
@@ -593,12 +624,14 @@ export function startScene(root: HTMLElement): Station {
       night += (nightTarget - night) * Math.min(1, dt * 1.5);
       world.setDim(night);
       world.update(t, dt);
-      const aim = stationCrew
+      const aim = cast
+        ? world.castPose(cast, camera.aspect)
+        : stationCrew
         ? world.crewPose(stationCrew, camera.aspect)
         : stationRoom
           ? world.roomPose(stationRoom, camera.aspect)
           : world.overviewPose(camera.aspect);
-      if (!stationRoom) {
+      if (!stationRoom && !cast) {
         aim.pos.x += panX;
         aim.look.x += panX;
       }

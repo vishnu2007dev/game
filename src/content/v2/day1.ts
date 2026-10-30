@@ -1,106 +1,210 @@
 import type { Crisis, CrewKey } from '../../engine/crisis';
-import type { Chat, TaskDef } from './types';
+import type { Chat } from './types';
+import type { Mark, SceneLine, SceneChoice } from '../../game/story';
 
-// Day 1, Routine checks. Nothing goes wrong today. The point is to learn
-// the station by touching it, and to get to know the five people on it
-// before anything happens to them.
+// Day 1, Routine. Nothing goes wrong today. Each job leads to the next
+// person, so by the evening the player has stood in every room and met
+// everyone face to face before anything happens to them.
 
 /** The code read out digit by digit, the way you say it on a radio. */
 const spoken = (s: Crisis) => s.hatchCode.split('').join(' ');
 
-export const DAY1_TASKS: TaskDef[] = [
+interface Beat {
+  /** The "Now:" line while the player makes their way there. */
+  now: string;
+  room: string;
+  cast: CrewKey[];
+  marks: Mark[];
+  /** Said as you arrive. */
+  open: SceneLine[];
+  /** An optional moment to cut in. */
+  ask?: { prompt: string; choices: SceneChoice[] };
+  /** The job, if there is one, and what is said after it. */
+  task?: { spot: string; now: string; after: SceneLine[] };
+}
+
+export const CALL_IN: SceneLine = {
+  who: 'mara',
+  text: 'Commander? Okafor, down in Ballast. Trim tank two is drifting again. Come and give me a hand?',
+};
+
+export const DAY1_BEATS: Beat[] = [
   {
-    id: 'valve',
-    label: 'Bleed trim tank 2 in Ballast',
+    now: 'Go down to Ballast. Mara is waiting.',
     room: 'ballast',
-    spot: 'valve',
-    kind: 'valve',
-    by: 'mara',
-    done: 'Nice hands, Commander. Tank is back in the green. I will make an engineer of you yet.',
+    cast: ['mara'],
+    marks: [{ id: 'mara', room: 'ballast', x: -4.3, z: -1.7 }],
+    open: [
+      { who: 'mara', text: 'There you are. Welcome to the basement.' },
+      { who: 'mara', text: 'Tank two creeps up a little every night. Nobody knows why. We just bleed it off in the morning.' },
+      { who: 'mara', text: 'The valve is on the bulkhead. Bring the needle into the green and hold it there.' },
+    ],
+    ask: {
+      prompt: 'Say something while you walk over.',
+      choices: [
+        {
+          label: 'How long have you been down here?',
+          effect: { trust: { mara: 1 } },
+          reply: [
+            { who: 'mara', text: 'Fourteen months. My daughter learned to walk on a video call.' },
+            { who: 'mara', text: 'Five more days. Then I am going to hold her and not let go.' },
+          ],
+        },
+        {
+          label: 'Show me how it is done.',
+          reply: [{ who: 'mara', text: 'Clockwise to bleed it. Gently. It bites if you rush it.' }],
+        },
+      ],
+    },
+    task: {
+      spot: 'valve',
+      now: 'Bleed trim tank 2. Tap the valve on the bulkhead.',
+      after: [
+        { who: 'mara', text: 'Nice hands. I will make an engineer of you yet.' },
+        { who: 'mara', text: 'Next door, Rook has been fighting the backup generator all night. Go and save him from himself.' },
+      ],
+    },
   },
   {
-    id: 'sync',
-    label: 'Sync the backup generator in Power',
+    now: 'Go next door to Power. Rook needs a hand.',
     room: 'power',
-    spot: 'sync',
-    kind: 'sync',
-    by: 'rook',
-    done: 'Clean close. The last commander slammed it in out of phase and blew every fuse on the lower deck.',
+    cast: ['rook'],
+    marks: [{ id: 'rook', room: 'power', x: -0.4, z: -2.0 }],
+    open: [
+      { who: 'rook', text: 'Come on. Come on, you old tin can. Fifty hertz. That is all I ask.' },
+      { who: 'rook', text: 'Oh. Commander. You did not hear any of that.' },
+    ],
+    ask: {
+      prompt: 'Say something.',
+      choices: [
+        {
+          label: 'Do you always talk to the machines?',
+          effect: { trust: { rook: 1 } },
+          reply: [{ who: 'rook', text: 'Only the ones that listen. Which is more than I can say for the company.' }],
+        },
+        {
+          label: 'What is wrong with it?',
+          reply: [{ who: 'rook', text: 'Nothing a steady hand cannot fix. Trim the governor, close the breaker when the needle comes round. I keep missing.' }],
+        },
+      ],
+    },
+    task: {
+      spot: 'sync',
+      now: 'Bring the backup generator online. Tap the control panel.',
+      after: [
+        { who: 'rook', text: 'Clean close. The last commander slammed it in out of phase and blew every fuse on the lower deck.' },
+        { who: 'rook', text: 'Teo wants the moon pool gate tested before his dive. He is funny about new commanders. Go and say hello.' },
+      ],
+    },
   },
   {
-    id: 'keypad',
-    label: 'Test the moon pool gate in the Dive Bay',
+    now: 'Go through to the Dive Bay and see Teo.',
     room: 'dive',
-    spot: 'keypad',
-    kind: 'keypad',
-    by: 'teo',
-    done: 'Gate cycled. Good. If I ever need to get back in fast, I am counting on that code.',
+    cast: ['teo'],
+    marks: [{ id: 'teo', room: 'dive', x: 4.4, z: -1.3 }],
+    open: [
+      { who: 'teo', text: 'Ramires. You are the new one.' },
+      { who: 'teo', text: 'The gate seals the moon pool. If it fails while I am out there, I do not come back in. So we test it every day.' },
+      { who: 'teo', text: (s) => `Code is ${spoken(s)}. Remember it. I will not write it down for you.` },
+    ],
+    ask: {
+      prompt: 'Say something.',
+      choices: [
+        {
+          label: 'What is it like out there?',
+          effect: { trust: { teo: 1 } },
+          reply: [{ who: 'teo', text: 'Dark. Quiet. Too quiet, some days. Out there you can hear your own heart.' }],
+        },
+        {
+          label: 'Say the code once more?',
+          reply: [{ who: 'teo', text: (s) => `${spoken(s)}. Last time.` }],
+        },
+      ],
+    },
+    task: {
+      spot: 'keypad',
+      now: 'Test the gate. Tap the keypad and enter Teo’s code.'.replace('’', "'"),
+      after: [
+        { who: 'teo', text: 'Seals hold. Good.' },
+        { who: 'teo', text: 'Hana has been in the lab since the cores came up. Someone should check she is eating. It will not be me.' },
+      ],
+    },
   },
   {
-    id: 'cores',
-    label: 'Call Hana for the drill core report',
+    now: 'Go up to the Lab and check on Hana.',
     room: 'lab',
-    spot: '',
-    kind: 'call',
-    by: 'hana',
-    done: '',
+    cast: ['hana'],
+    marks: [{ id: 'hana', room: 'lab', x: -0.9, z: -2.1 }],
+    open: [
+      { who: 'hana', text: 'Do not touch the tank. Please.' },
+      { who: 'hana', text: 'Cores eleven to fourteen came up from four hundred metres under the seabed. That rock has been sealed for a very long time.' },
+      { who: 'hana', text: 'And they smell like the sea. Fresh sea. Rock that old should smell of nothing at all.' },
+    ],
+    ask: {
+      prompt: 'What do you say?',
+      choices: [
+        {
+          label: 'Is it dangerous?',
+          hint: 'She hates being doubted.',
+          effect: { trust: { hana: -1 }, flags: ['cores_reported'] },
+          reply: [{ who: 'hana', text: 'Everything is dangerous if you lick it, Commander. They are sealed. Let me work.' }],
+        },
+        {
+          label: 'Sounds like a discovery.',
+          hint: 'She will like that.',
+          effect: { trust: { hana: 1 }, flags: ['cores_reported', 'hana_encouraged'] },
+          reply: [
+            { who: 'hana', text: 'It might be the biggest one of my life. Thank you for saying so.' },
+            { who: 'hana', text: 'Do me a favour. Do not tell the company yet.' },
+          ],
+        },
+        {
+          label: 'Keep them sealed. Nobody opens them.',
+          hint: 'Safe. She will take it as an order.',
+          effect: { flags: ['cores_reported', 'cores_sealed'] },
+          reply: [{ who: 'hana', text: 'They have been sealed since they came up. Fine. Noted. Sealed.' }],
+        },
+      ],
+    },
   },
 ];
 
-/** Calls that move the day along. */
-export const DAY1_CHATS: Record<'teoCode' | 'hanaCores', Chat> = {
-  teoCode: {
-    with: 'teo',
-    nodes: {
-      start: {
-        lines: ['Ramires.', 'The gate code? They sent a commander down here without the codes. Of course they did.'],
-        choices: [
-          {
-            label: 'Just the code, Teo.',
-            reply: [(s) => `${spoken(s)}. Say it back to yourself. People get it wrong down here.`],
-            effect: { flags: ['got_code'] },
-          },
-          {
-            label: 'First day. Help me out?',
-            hint: 'Honesty goes a long way with Teo.',
-            reply: [(s) => `Ha. Honest. I like that. It is ${spoken(s)}.`, 'And do not write it on a sticky note. The last commander did.'],
-            effect: { flags: ['got_code'], trust: { teo: 1 } },
-          },
-        ],
+/** Evening: everyone in Quarters for the only meal they eat together. */
+export const DINNER = {
+  now: 'Evening. The crew are gathering in Quarters.',
+  marks: [
+    { id: 'ilya', room: 'quarters', x: 3.7, z: -1.5 },
+    { id: 'mara', room: 'quarters', x: 4.5, z: -2.1 },
+    { id: 'rook', room: 'quarters', x: 5.3, z: -1.6 },
+    { id: 'hana', room: 'quarters', x: 6.1, z: -2.2 },
+    { id: 'teo', room: 'quarters', x: 4.9, z: -1.0 },
+  ] as Mark[],
+  open: [
+    { who: 'ilya', text: 'Day one of five. Four to go. I have counted them twice.' },
+    { who: 'rook', text: 'The company says the rescue sub is on schedule. The company also said the generator was new.' },
+    { who: 'mara', text: 'Leave it, Rook.' },
+    { who: 'hana', text: 'The cores are the reason any of us are paid. You could be a little more grateful to the rock.' },
+    { who: 'teo', text: 'I am grateful to the rock. I would just like to be grateful from the surface.' },
+  ] as SceneLine[],
+  ask: {
+    prompt: 'They look at you. Say something to the crew.',
+    choices: [
+      {
+        label: 'Five days. We get everyone home.',
+        hint: 'A promise. They will remember it.',
+        effect: { trust: { mara: 1, teo: 1, ilya: 1 }, flags: ['promised_home'] },
+        reply: [{ who: 'ilya', text: 'I will hold you to that, Commander.' }],
       },
-    },
-  },
-  hanaCores: {
-    with: 'hana',
-    nodes: {
-      start: {
-        lines: [
-          'Sato. You want the core report.',
-          'Cores eleven to fourteen came up from four hundred metres under the seabed. That rock has been sealed for a very long time.',
-          'One odd thing. They smell like the sea. Fresh sea. Rock that old should smell of nothing at all.',
-        ],
-        choices: [
-          {
-            label: 'Is it dangerous?',
-            hint: 'She hates being doubted.',
-            effect: { trust: { hana: -1 }, flags: ['cores_reported'] },
-            reply: ['Everything is dangerous if you lick it, Commander. They are sealed. Let me work.'],
-          },
-          {
-            label: 'Sounds like a discovery.',
-            hint: 'She will like that.',
-            effect: { trust: { hana: 1 }, flags: ['cores_reported', 'hana_encouraged'] },
-            reply: ['It might be the biggest one of my life. Thank you for saying so.', 'Do me a favour. Do not tell the company yet.'],
-          },
-          {
-            label: 'Keep them sealed. Nobody opens them.',
-            hint: 'Safe. She will take it as an order.',
-            effect: { flags: ['cores_reported', 'cores_sealed'] },
-            reply: ['They have been sealed since they came up.', 'Fine. Noted. Sealed.'],
-          },
-        ],
+      {
+        label: 'Good work today, all of you.',
+        effect: { trust: { rook: 1, hana: 1 } },
+        reply: [{ who: 'rook', text: 'Careful. If the company hears you praising us they will cut the coffee.' }],
       },
-    },
+      {
+        label: 'Get some sleep. Long day tomorrow.',
+        reply: [{ who: 'mara', text: 'Commander has spoken. Lights out.' }],
+      },
+    ] as SceneChoice[],
   },
 };
 
@@ -172,12 +276,6 @@ export const BUSY: Record<CrewKey, string> = {
   ilya: 'Venn. With a patient. Well, with paperwork. Later.',
   teo: 'Ramires. Gearing up. Talk later.',
   hana: 'Sato. Please. I am in the middle of something.',
-};
-
-export const DAY1_OPEN = {
-  radio: { who: 'OKAFOR', text: 'Morning, Commander. Your checks are on the list. Tap a marker to start one.' },
-  allDone: { who: 'OKAFOR', text: 'That is the lot. Good first shift. Get some rest, we will keep the lights on.' },
-  needCode: { who: 'RAMIRES', text: 'You need the gate code? Call me. Tap my name in the crew list, then Call.' },
 };
 
 /** The night: something knocks on the hull. */

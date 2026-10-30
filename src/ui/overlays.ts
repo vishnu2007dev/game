@@ -230,9 +230,10 @@ export class Overlays {
     c.remove();
   }
 
-  async dayCard(day: number, rescueIn: number) {
+  async dayCard(day: number, rescueIn: number, title = '') {
     const c = el('section', 'ov-card');
-    c.innerHTML = `<p class="ov-card-day">DAY ${day}</p><p class="ov-card-sub">RESCUE IN ${rescueIn} DAYS</p>`;
+    c.innerHTML = `<p class="ov-card-day">DAY ${day}</p><p class="ov-card-title"></p><p class="ov-card-sub">RESCUE IN ${rescueIn} DAYS</p>`;
+    c.querySelector('.ov-card-title')!.textContent = title;
     this.root.appendChild(c);
     await wait(2200);
     c.classList.add('is-leaving');

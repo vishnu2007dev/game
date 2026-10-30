@@ -128,6 +128,22 @@ export interface Station {
   crewPose(id: string, aspect: number): { pos: THREE.Vector3; look: THREE.Vector3; fov: number };
   /** Stop someone where they are and have them turn to the camera and talk; null lets them go back to work. */
   hold(id: string | null): void;
+  /**
+   * Walk someone to a place, through doors and up or down the ladder
+   * trunk. Resolves true on arrival, false if a shut door is in the way.
+   * They stay there, doing `clip`, until told otherwise.
+   */
+  sendCrew(id: string, to: { room: string; x: number; z: number; face?: number; clip?: Clip }): Promise<boolean>;
+  /** Put someone somewhere at once, standing still: for cuts between scenes. */
+  placeCrew(id: string, to: { room: string; x: number; z: number; face?: number }): void;
+  /** Play an animation on someone without moving them, and turn them. */
+  act(id: string, clip: Clip, face?: number): void;
+  /** Let someone go back to their own work, walking home first if needed. */
+  release(id: string): void;
+  /** Where someone is standing. */
+  crewAt(id: string): THREE.Vector3;
+  /** A shot that holds several crew in frame together. */
+  castPose(ids: string[], aspect: number): { pos: THREE.Vector3; look: THREE.Vector3; fov: number };
   /** Watertight doors: shut or open, animated. */
   setDoor(id: DoorKey, closed: boolean): void;
   /** Tap targets for the doors, named door:<id>. */
@@ -527,6 +543,43 @@ export function buildStation(screens: THREE.Texture[]): Station {
     hold(id) {
       for (const a of agents) a.hold(a.id === id);
     },
+    sendCrew(id, to) {
+      const a = agents.find((q) => q.id === id)!;
+      const route = planRoute(a.position, to, doors.isOpen);
+      if (!route) return Promise.resolve(false);
+      return a.order(route, to.face ?? 0, to.clip ?? 'Idle_Loop');
+    },
+    act(id, clip, face) {
+      agents.find((q) => q.id === id)!.act(clip, face);
+    },
+    placeCrew(id, to) {
+      const a = agents.find((q) => q.id === id)!;
+      const room = ROOMS.find((r) => r.id === to.room)!;
+      a.position.set(to.x, floorOf(room.deck), to.z);
+      a.act('Idle_Loop', to.face ?? 0);
+    },
+    release(id) {
+      const a = agents.find((q) => q.id === id)!;
+      const home = ROOMS.find((r) => r.id === a.home)!;
+      const here = roomOfPoint(a.position);
+      if (here?.id === home.id) return a.free();
+      const spot = CREW.find((c) => c.id === id)!.spots[0];
+      const route = planRoute(a.position, { room: home.id, x: spot.x, z: spot.z }, doors.isOpen);
+      if (route) void a.order(route, spot.face, spot.clip).then(() => a.free());
+    },
+    crewAt(id) {
+      return agents.find((q) => q.id === id)!.position.clone();
+    },
+    castPose(ids, aspect) {
+      const pts = ids.map((id) => agents.find((q) => q.id === id)!.position);
+      const box3 = new THREE.Box3().setFromPoints(pts);
+      const c = box3.getCenter(new THREE.Vector3());
+      const fov = 32;
+      const tan = Math.tan(THREE.MathUtils.degToRad(fov / 2));
+      const half = Math.max(1.2, (box3.max.x - box3.min.x) / 2 + 0.9);
+      const dist = Math.max(half / tan / Math.max(aspect, 0.5), 1.25 / tan);
+      return { pos: v(c.x, c.y + 1.55, Math.max(c.z, box3.max.z) + dist), look: v(c.x, c.y + 1.15, c.z), fov };
+    },
     update(t, dt) {
       snow.update(dt);
       props.update(t);
@@ -553,6 +606,10 @@ class Agent {
   private heading = 0;
   private held = false;
   private now = 0;
+  /** Following an order: a route, then stay put doing `clip`. */
+  private ordered: { route: Leg[]; face: number; clip: Clip; done: (ok: boolean) => void } | null = null;
+  /** Arrived somewhere on orders and staying there. */
+  private staying = false;
   constructor(
     private def: CrewDef,
     private m: CrewMember,
@@ -564,6 +621,42 @@ class Agent {
 
   get id() {
     return this.def.id;
+  }
+
+  get home() {
+    return this.def.home;
+  }
+
+  get position() {
+    return this.m.root.position;
+  }
+
+  order(route: Leg[], face: number, clip: Clip): Promise<boolean> {
+    this.ordered?.done(false);
+    this.held = false;
+    this.target = null;
+    this.path = [];
+    this.staying = true;
+    return new Promise((done) => {
+      this.ordered = { route: [...route], face, clip, done };
+      this.m.play('Walk_Loop', 0.3);
+    });
+  }
+
+  act(clip: Clip, face?: number) {
+    this.staying = true;
+    this.target = null;
+    this.path = [];
+    if (face !== undefined) this.heading = face;
+    this.m.play(clip, 0.35);
+  }
+
+  /** Back to wandering the home room. */
+  free() {
+    this.staying = false;
+    this.ordered = null;
+    this.until = this.now + 2;
+    this.m.play('Idle_Loop', 0.4);
   }
 
   /** Stop and face the camera to talk, or go back to work. */
@@ -587,6 +680,8 @@ class Agent {
     const p = this.m.root.position;
     this.turn(dt);
     if (this.held) return;
+    if (this.ordered) return this.follow(dt);
+    if (this.staying) return;
     if (!this.target) {
       if (t < this.until) return;
       // Choose a different spot and walk there via the lane.
@@ -611,6 +706,41 @@ class Agent {
       return;
     }
     p.addScaledVector(to.normalize(), Math.min(d, 1.05 * dt));
+    this.heading = Math.atan2(to.x, to.z);
+  }
+
+  /** Walk the ordered route one leg at a time; climbs go straight up or down. */
+  private follow(dt: number) {
+    const o = this.ordered!;
+    const p = this.m.root.position;
+    const leg = o.route[0];
+    if (!leg) {
+      this.ordered = null;
+      this.heading = o.face;
+      this.m.play(o.clip, 0.4);
+      o.done(true);
+      return;
+    }
+    const to = leg.to.clone().sub(p);
+    if (leg.climb) {
+      if (Math.abs(to.y) < 0.02) {
+        p.y = leg.to.y;
+        o.route.shift();
+        this.m.play('Walk_Loop', 0.3);
+        return;
+      }
+      if (Math.abs(to.y) > 0.5 && this.m.root.userData.clip !== 'Idle_Loop') this.m.play('Idle_Loop', 0.2);
+      this.heading = Math.PI;
+      p.y += Math.sign(to.y) * Math.min(Math.abs(to.y), 0.9 * dt);
+      return;
+    }
+    to.y = 0;
+    const d = to.length();
+    if (d < 0.03) {
+      o.route.shift();
+      return;
+    }
+    p.addScaledVector(to.normalize(), Math.min(d, 1.2 * dt));
     this.heading = Math.atan2(to.x, to.z);
   }
 
@@ -1190,6 +1320,9 @@ function buildDoors(scene: THREE.Scene, black: THREE.Material) {
     set(id: DoorKey, closed: boolean) {
       doors.get(id)!.target = closed ? 0 : 1;
     },
+    isOpen(id: DoorKey) {
+      return doors.get(id)!.target === 1;
+    },
     update(dt: number) {
       for (const d of doors.values()) {
         if (Math.abs(d.open - d.target) < 0.001) continue;
@@ -1247,4 +1380,87 @@ function buildHotspots(scene: THREE.Scene) {
       mat.opacity = 0.75 + Math.sin(t * 4) * 0.25;
     },
   };
+}
+
+/** One leg of a walk: a point on the floor, or a climb to a new height. */
+interface Leg {
+  to: THREE.Vector3;
+  climb?: boolean;
+}
+
+const DOOR_Z = (DOOR.z0 + DOOR.z1) / 2;
+
+/** The room a point is in, by deck and x. */
+function roomOfPoint(p: THREE.Vector3) {
+  const deck = p.y > (LOWER.ceil + UPPER.floor) / 2 ? 'upper' : 'lower';
+  return ROOMS.find((r) => r.deck === deck && p.x >= r.x0 - 0.05 && p.x <= r.x1 + 0.05) ?? null;
+}
+
+/** The door between two neighbouring rooms on one deck. */
+function doorBetween(a: RoomDef, b: RoomDef): DoorKey {
+  const ids = [a.id, b.id].sort().join('|');
+  const map: Record<string, DoorKey> = {
+    'command|lab': 'command-lab',
+    'lab|quarters': 'lab-quarters',
+    'ballast|power': 'ballast-power',
+    'dive|power': 'power-dive',
+  };
+  return map[ids];
+}
+
+/**
+ * A walking route from where someone stands to a target: out to the lane,
+ * through each doorway in turn, up or down the ladder trunk between the
+ * dive bay and the quarters if the decks differ, then to the mark.
+ * Returns null if a shut door is in the way.
+ */
+function planRoute(from: THREE.Vector3, to: { room: string; x: number; z: number }, isOpen: (d: DoorKey) => boolean): Leg[] | null {
+  const start = roomOfPoint(from);
+  const goal = ROOMS.find((r) => r.id === to.room)!;
+  if (!start) return null;
+  const legs: Leg[] = [];
+  let y = from.y;
+  let x = from.x;
+  const walkTo = (nx: number, nz: number) => {
+    legs.push({ to: v(nx, y, nz) });
+    x = nx;
+  };
+  /** Cross rooms along one deck towards a target x. */
+  const along = (deck: 'upper' | 'lower', fromRoom: RoomDef, targetX: number): boolean => {
+    const row = ROOMS.filter((r) => r.deck === deck).sort((a, b) => a.x0 - b.x0);
+    let i = row.indexOf(fromRoom);
+    const j = row.findIndex((r) => targetX >= r.x0 && targetX <= r.x1);
+    while (i !== j) {
+      const step = j > i ? 1 : -1;
+      const next = row[i + step];
+      const door = doorBetween(row[i], next);
+      if (!isOpen(door)) return false;
+      const wall = step > 0 ? row[i].x1 : row[i].x0;
+      walkTo(wall - step * 0.45, DOOR_Z);
+      walkTo(wall + step * 0.45, DOOR_Z);
+      i += step;
+    }
+    return true;
+  };
+  walkTo(x, LANE_Z);
+  if (start.deck !== goal.deck) {
+    // To the trunk, climb, then carry on from the other deck.
+    const tx = (TRUNK.x0 + TRUNK.x1) / 2;
+    const fromRoom = start;
+    if (!along(start.deck, fromRoom, tx)) return null;
+    if (!isOpen('trunk')) return null;
+    // Approach and leave the ladder from the side, clear of the bed upstairs.
+    walkTo(tx - 0.8, LANE_Z);
+    walkTo(tx - 0.8, TRUNK.z1 + 0.15);
+    walkTo(tx, TRUNK.z1 + 0.15);
+    y = floorOf(goal.deck);
+    legs.push({ to: v(tx, y, TRUNK.z1 + 0.15), climb: true });
+    const landing = ROOMS.find((r) => r.deck === goal.deck && tx >= r.x0 && tx <= r.x1)!;
+    walkTo(tx - 0.8, TRUNK.z1 + 0.15);
+    walkTo(tx - 0.8, LANE_Z);
+    if (!along(goal.deck, landing, to.x)) return null;
+  } else if (!along(start.deck, start, to.x)) return null;
+  walkTo(to.x, LANE_Z);
+  walkTo(to.x, to.z);
+  return legs;
 }

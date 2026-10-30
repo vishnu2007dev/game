@@ -15,6 +15,7 @@ import { Coach } from './ui/coach';
 import { meetCrew, tutorial } from './game/onboarding';
 import { ChatPanel } from './ui/chat';
 import { Objectives } from './ui/objectives';
+import { Subtitles } from './ui/subtitles';
 import { type Ctx, change, shortCall, exclusive, syncDoors } from './game/run';
 import { day1 } from './game/days/day1';
 import { newCrisis, save, type CrewKey, type DoorKey } from './engine/crisis';
@@ -70,6 +71,7 @@ const nextEvent = (match: (e: StationEvent) => boolean) =>
   });
 const chat = new ChatPanel(root);
 const objectives = new Objectives(root);
+const subs = new Subtitles(root);
 station.onStation = (e) => {
   if (e.type === 'door') toggleDoor(e.id);
   else if (e.type === 'overview') hud.overview();
@@ -120,6 +122,7 @@ const ctx: Ctx = {
   chat,
   objectives,
   coach,
+  subs,
   next: nextEvent,
   state: newCrisis(randomSeed()),
   busy: false,

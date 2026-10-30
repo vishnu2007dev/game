@@ -1,91 +1,132 @@
-import { type Ctx, runChat, shortCall, exclusive, change, crewDef } from '../run';
-import { DAY1_TASKS, DAY1_CHATS, DAY1_SMALLTALK, BUSY, DAY1_OPEN, NIGHT1 } from '../../content/v2/day1';
+import * as THREE from 'three';
+import { type Ctx, runChat, shortCall, exclusive, change } from '../run';
+import { stage, lines, ask, end } from '../story';
+import { DAY1_BEATS, CALL_IN, DINNER, DAY1_SMALLTALK, BUSY, NIGHT1 } from '../../content/v2/day1';
 import { SPOTS } from '../../scene/station';
-import { say, rescueIn, type CrewKey } from '../../engine/crisis';
+import { rescueIn, type CrewKey } from '../../engine/crisis';
 import { valveTask } from '../../ui/tasks/valve';
 import { syncTask } from '../../ui/tasks/sync';
 import { keypadTask } from '../../ui/tasks/keypad';
+import type { TaskResult } from '../../ui/tasks/panel';
 import { audio } from '../../audio/audio';
 import { wait } from '../../ui/overlays';
 
+/** A marker floating in the middle of each room, for "go here" moments. */
+const ROOM_MARK: Record<string, THREE.Vector3> = {
+  command: new THREE.Vector3(-5.4, 5.4, -2),
+  lab: new THREE.Vector3(0, 5.4, -2),
+  quarters: new THREE.Vector3(5.4, 5.4, -2),
+  ballast: new THREE.Vector3(-5.4, 2.0, -2),
+  power: new THREE.Vector3(0, 2.0, -2),
+  dive: new THREE.Vector3(5.4, 2.0, -2),
+};
+
 /**
- * Day 1, Routine checks. Four jobs in four rooms, in any order. The day
- * ends when all four are done, and then the night has a knock in it.
+ * Wait until the player goes to a room: tapping it, its marker, or
+ * someone who works there all count.
  */
-export async function day1(ctx: Ctx) {
-  const { st, ov, objectives, hud } = ctx;
-  await ov.dayCard(1, rescueIn(ctx.state));
-  objectives.set('Morning checks', DAY1_TASKS.map((t) => ({ id: t.id, label: t.label })));
-  const placeSpots = () =>
-    st.setHotspots(
-      DAY1_TASKS.filter((t) => t.spot && !objectives.isDone(t.id)).map((t) => ({ id: t.spot, at: SPOTS[t.spot as keyof typeof SPOTS] })),
-    );
-  placeSpots();
-  hud.setHint('Tap an amber marker to start a check. Tap someone to talk.');
-  void ov.radio(DAY1_OPEN.radio.who, DAY1_OPEN.radio.text);
+export async function goToRoom(ctx: Ctx, room: string, now: string) {
+  ctx.objectives.now(now);
+  ctx.st.setHotspots([{ id: `go:${room}`, at: ROOM_MARK[room] }]);
+  const e = await ctx.next(
+    (e) => (e.type === 'room' && e.room.id === room) || (e.type === 'crew' && e.crew.home === room) || (e.type === 'hotspot' && e.id === `go:${room}`),
+  );
+  ctx.st.setHotspots([]);
+  if (e.type !== 'room') await ctx.goTo(room);
+}
 
-  const talked = new Set<CrewKey>();
-  ctx.onCall = (id) =>
-    exclusive(ctx, async () => {
-      if (id === 'teo' && !objectives.isDone('keypad')) return runChat(ctx, DAY1_CHATS.teoCode);
-      if (id === 'hana' && !objectives.isDone('cores')) {
-        await runChat(ctx, DAY1_CHATS.hanaCores);
-        done('cores');
-        return;
-      }
-      if (talked.has(id)) return shortCall(ctx, id, BUSY[id]);
-      talked.add(id);
-      await runChat(ctx, DAY1_SMALLTALK[id]);
-    });
-
-  let finish!: () => void;
-  const finished = new Promise<null>((r) => (finish = () => r(null)));
-  const done = (id: string) => {
-    objectives.tick(id);
-    if (objectives.allDone) finish();
-    const task = DAY1_TASKS.find((t) => t.id === id)!;
-    const line = say(ctx.state, task.done);
-    if (line) void ov.radio(crewDef(task.by).callsign, line);
-    change(ctx, { flags: [`d1_${id}`], trust: { [task.by]: 1 } });
-    placeSpots();
-  };
-
-  const work = async (spot: string) => {
-    const task = DAY1_TASKS.find((t) => t.spot === spot);
-    if (!task || objectives.isDone(task.id)) return;
+/** Show the task marker and keep offering the task until it is done. */
+async function doTask(ctx: Ctx, spot: string, now: string) {
+  ctx.objectives.now(now);
+  ctx.st.setHotspots([{ id: spot, at: SPOTS[spot as keyof typeof SPOTS] }]);
+  for (;;) {
+    await ctx.next((e) => e.type === 'hotspot' && e.id === spot);
+    let r: TaskResult = { quality: null };
     await exclusive(ctx, async () => {
-      let r;
-      if (task.kind === 'valve') {
-        r = await valveTask(ctx.root, { title: 'Trim tank 2', instruction: 'Bleed the tank into the green band, then let go.' });
-      } else if (task.kind === 'sync') {
+      if (spot === 'valve') r = await valveTask(ctx.root, { title: 'Trim tank 2', instruction: 'Bleed the tank into the green band, then let go.' });
+      else if (spot === 'sync')
         r = await syncTask(ctx.root, {
           title: 'Backup generator',
           instruction: 'Match the generator to the station bus, then close the breaker in phase.',
           seed: ctx.state.seed,
         });
-      } else {
+      else
         r = await keypadTask(ctx.root, {
           title: 'Moon pool gate',
           instruction: 'Enter the gate code to cycle the seals.',
           code: ctx.state.hatchCode,
-          onNeedCode: () => void ov.radio(DAY1_OPEN.needCode.who, DAY1_OPEN.needCode.text),
+          onNeedCode: () => void ctx.ov.radio('RAMIRES', `${ctx.state.hatchCode.split('').join(' ')}. Try to keep up, Commander.`),
         });
-      }
-      if (r.quality !== null) done(task.id);
     });
-  };
-
-  while (!objectives.allDone) {
-    const e = await Promise.race([ctx.next((e) => e.type === 'hotspot'), finished]);
-    if (e?.type === 'hotspot') void work(e.id);
+    if (r.quality !== null) {
+      change(ctx, { flags: [`d1_${spot}`] });
+      ctx.st.setHotspots([]);
+      return;
+    }
   }
-  while (ctx.busy) await wait(200);
+}
 
-  await ov.radio(DAY1_OPEN.allDone.who, DAY1_OPEN.allDone.text, 3200);
-  objectives.hide();
-  st.setHotspots([]);
-  hud.setHint('');
+/**
+ * Day 1, Routine. One thread through the station: Mara sends you to
+ * Rook, Rook to Teo, Teo to Hana, and the evening brings everyone
+ * together before the knock in the night.
+ */
+export async function day1(ctx: Ctx) {
+  const { ov, objectives, hud } = ctx;
+  await ov.dayCard(1, rescueIn(ctx.state), 'Routine');
+  hud.setHint('Tap a room to go there. Tap someone to talk.');
+
+  // Calls stay open between scenes: small talk once each, then busy.
+  const talked = new Set<CrewKey>();
+  ctx.onCall = (id) =>
+    exclusive(ctx, async () => {
+      if (talked.has(id)) return shortCall(ctx, id, BUSY[id]);
+      talked.add(id);
+      await runChat(ctx, DAY1_SMALLTALK[id]);
+    });
+
+  await ov.radio('OKAFOR', CALL_IN.text as string, 3600);
+  for (const beat of DAY1_BEATS) {
+    await goToRoom(ctx, beat.room, beat.now);
+    objectives.hide();
+    await stage(ctx, beat.cast, beat.marks);
+    await lines(ctx, beat.cast, beat.open);
+    if (beat.ask) await ask(ctx, beat.cast, beat.ask.prompt, beat.ask.choices);
+    end(ctx);
+    ctx.st.showStation(beat.room);
+    if (beat.task) {
+      await doTask(ctx, beat.task.spot, beat.task.now);
+      objectives.hide();
+      await stage(ctx, beat.cast);
+      await lines(ctx, beat.cast, beat.task.after);
+      end(ctx);
+      ctx.st.showStation(beat.room);
+    }
+    change(ctx, { trust: { [beat.cast[0]]: 1 } });
+  }
+  await evening(ctx);
   await night1(ctx);
+}
+
+/** Everyone together in Quarters, the one meal they share. */
+async function evening(ctx: Ctx) {
+  const { st, objectives, hud } = ctx;
+  objectives.now(DINNER.now);
+  const cast = DINNER.marks.map((m) => m.id);
+  // Watch them head off for a moment, then cut to the table.
+  for (const m of DINNER.marks) void st.sendCrew(m.id, { room: m.room, x: m.x, z: m.z });
+  await ctx.goTo(null);
+  await wait(6000);
+  await hud.transition(() => {
+    for (const m of DINNER.marks) st.placeCrew(m.id, { room: m.room, x: m.x, z: m.z });
+    st.showStation('quarters');
+  });
+  objectives.hide();
+  await stage(ctx, cast);
+  await lines(ctx, cast, DINNER.open);
+  await ask(ctx, cast, DINNER.ask.prompt, DINNER.ask.choices);
+  await lines(ctx, cast, [{ who: 'ilya', text: 'Lights out, everyone. Same again tomorrow.' }]);
+  end(ctx, cast);
 }
 
 /** The lights go down, and something knocks three times. */

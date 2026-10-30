@@ -6,6 +6,7 @@ import type { Overlays } from '../ui/overlays';
 import type { ChatPanel } from '../ui/chat';
 import type { Objectives } from '../ui/objectives';
 import type { Coach } from '../ui/coach';
+import type { Subtitles } from '../ui/subtitles';
 import { apply, say, check, type Crisis, type CrewKey, type CrisisEffect, type DoorKey } from '../engine/crisis';
 import type { Chat, ChatChoice, ChatNode } from '../content/v2/types';
 
@@ -19,6 +20,7 @@ export interface Ctx {
   chat: ChatPanel;
   objectives: Objectives;
   coach: Coach;
+  subs: Subtitles;
   /** Resolves on the next station event that matches. */
   next: (match: (e: StationEvent) => boolean) => Promise<StationEvent>;
   state: Crisis;

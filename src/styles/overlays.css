@@ -2052,3 +2052,143 @@
   outline: 2px solid var(--ov-amber);
   outline-offset: 2px;
 }
+
+/* Day card title line. */
+.ov-card-title {
+  margin: 6px 0 0;
+  font: 600 clamp(22px, 3vw, 34px) / 1 var(--ov-label);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ov-amber);
+}
+
+.ov-card-title:empty {
+  display: none;
+}
+
+/* "Now" line: the next thing to do. */
+.ob.is-in {
+  animation: ov-rise 0.3s ease-out;
+}
+
+.ob-now .ob-label {
+  font: 500 14px/1.45 var(--ov-mono);
+}
+
+@media (max-width: 640px) {
+  .ob-now {
+    display: flex !important;
+  }
+}
+
+/* Film subtitles for story scenes. */
+.sb {
+  position: fixed;
+  left: 50%;
+  bottom: calc(26px + env(safe-area-inset-bottom, 0px));
+  z-index: 4;
+  width: min(760px, calc(100vw - 32px));
+  box-sizing: border-box;
+  transform: translateX(-50%);
+  padding: 14px 20px 14px;
+  color: var(--ov-ink);
+  font-family: var(--ov-mono);
+  background: linear-gradient(180deg, rgba(4, 6, 7, 0.55), rgba(4, 6, 7, 0.88));
+  text-align: center;
+}
+
+.sb-who {
+  margin: 0;
+  font: 700 14px/1 var(--ov-label);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--who, var(--ov-ink));
+  filter: brightness(1.35);
+}
+
+.sb-text {
+  margin: 8px 0 0;
+  min-height: 1.5em;
+  font: 400 17px/1.5 var(--ov-mono);
+  text-shadow: 0 1px 3px #000;
+}
+
+.sb-more {
+  margin: 8px 0 0;
+  font: 500 10px var(--ov-mono);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ov-dim);
+  animation: ro-beat 1.6s ease-in-out infinite;
+}
+
+.sb-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  text-align: left;
+}
+
+.sb-choices:empty {
+  display: none;
+}
+
+.sb-choice {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 10px;
+  padding: 10px 14px;
+  color: var(--ov-ink);
+  text-align: left;
+  background: rgba(230, 233, 236, 0.06);
+  border: 1px solid var(--ov-line);
+  border-radius: 0;
+  font: 500 14px/1.35 var(--ov-mono);
+  cursor: pointer;
+}
+
+.sb-choice:hover,
+.sb-choice:focus-visible {
+  border-color: var(--ov-amber);
+  outline: none;
+}
+
+.sb-choice kbd {
+  grid-row: span 2;
+  font: 600 12px var(--ov-mono);
+  color: var(--ov-amber);
+}
+
+.sb-choice-hint {
+  font: 400 12px/1.4 var(--ov-mono);
+  color: var(--ov-dim);
+}
+
+.sb-choice-hint:empty {
+  display: none;
+}
+
+/* Scenes are cinematic: the room header and hints step back. */
+.is-scene .sh-bottom,
+.is-scene .ob {
+  visibility: hidden;
+}
+
+@media (max-width: 640px) {
+  .sb {
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    padding: 12px 14px;
+  }
+
+  .sb-text {
+    font-size: 15px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sb-more,
+  .ob.is-in {
+    animation: none;
+  }
+}

@@ -1,4 +1,4 @@
-// Plays Day 1 the way a player would: every check, two calls, the night.
+// Plays the Day 1 story the way a player would: every scene, every job, the evening, the night.
 // node scripts/test-day1.mjs [base] [w] [h]
 import { chromium } from 'playwright-core';
 import { mkdirSync, globSync } from 'node:fs';
@@ -36,7 +36,29 @@ const status = () => p.locator('.tk-status').textContent();
 const canvasBox = () => p.locator('.tk-canvas').boundingBox();
 const toPage = (box, x, y) => ({ x: box.x + (x / 520) * box.width, y: box.y + (y / 300) * box.height });
 
-// 1. Valve in Ballast.
+const nowText = async () => ((await p.locator('.ob').isVisible()) ? await p.locator('.ob-label').first().textContent() : '');
+let scenes = 0;
+/** Click through subtitles, picking the first thing to say, until the Now line matches. */
+const playScene = async (label, until) => {
+  for (let i = 0; i < 400; i++) {
+    if ((await nowText()).includes(until)) return;
+    if (await p.locator('.sb-choice').count()) {
+      if (!scenes++) await shot('scene');
+      await p.locator('.sb-choice').first().click();
+    } else if (await p.locator('.sb:not([hidden])').count()) {
+      const sb = await p.locator('.sb').boundingBox();
+      await p.mouse.click(sb.x + sb.width / 2, sb.y + 10);
+    }
+    await p.waitForTimeout(400);
+  }
+  throw new Error(`stuck in scene ${label}`);
+};
+/** Go to a room the way a player taps it. */
+const enter = (room) => p.evaluate((r) => window.__station.showStation(r), room);
+
+// 1. Ballast with Mara: talk, bleed the tank.
+await enter('ballast');
+await playScene('mara', 'valve');
 await until('valve', () => tapSpot('valve'), () => p.locator('.tk').isVisible());
 let box = await canvasBox();
 const c = toPage(box, 380, 150);
@@ -53,9 +75,13 @@ for (let i = 0; i < 600; i++) {
 await shot('valve');
 await p.mouse.up();
 await p.waitForSelector('.tk', { state: 'detached', timeout: 30000 });
-console.log('valve done', await p.locator('.ob-count').textContent());
+console.log('valve done');
+await playScene('mara after', 'Power');
 
-// 2. Generator sync in Power: trim the governor, then close in phase.
+// 2. Power with Rook, then the generator sync.
+await enter('power');
+await playScene('rook', 'control panel');
+// Generator sync in Power: trim the governor, then close in phase.
 await until('sync', () => tapSpot('sync'), () => p.locator('.tk').isVisible());
 box = await canvasBox();
 const knob = toPage(box, 400, 112);
@@ -86,36 +112,35 @@ for (let tries = 0; tries < 60 && (await p.locator('.tk-canvas').count()); tries
   } else await frame();
 }
 await p.waitForSelector('.tk', { state: 'detached', timeout: 60000 });
-console.log('sync done', await p.locator('.ob-count').textContent());
+console.log('sync done');
+await playScene('rook after', 'Dive');
 
-// 3. Call Teo for the gate code, then the keypad.
-const callRow = async (i) => {
-  if (w < 700) await p.locator('.ro-toggle').click();
-  await p.locator('.ro-call').nth(i).click();
-};
-await callRow(3);
-await p.waitForSelector('.ch-choice', { timeout: 60000 });
-await p.waitForTimeout(2500);
-await shot('chat');
-await p.locator('.ch-choice').nth(1).click();
-await p.waitForSelector('.ch-hang', { timeout: 60000 });
-console.log('teo said:', (await p.locator('.ch-body').textContent()).slice(-160));
-await p.locator('.ch-hang').click();
-await p.waitForTimeout(800);
+// 3. Dive Bay with Teo: he says the code; then the keypad.
+await enter('dive');
+await playScene('teo', 'keypad');
 const code = await p.evaluate(() => window.__ctx.state.hatchCode);
 await until('keypad', () => tapSpot('keypad'), () => p.locator('.tk').isVisible());
 for (const d of code) await p.locator('.tk-key', { hasText: new RegExp(`^${d}$`) }).click();
 await shot('keypad');
 await p.locator('.tk-key.is-ok').click();
 await p.waitForSelector('.tk', { state: 'detached', timeout: 30000 });
-console.log('keypad done', await p.locator('.ob-count').textContent());
+console.log('keypad done');
+await playScene('teo after', 'Lab');
 
-// 4. Call Hana.
-await callRow(4);
-await p.waitForSelector('.ch-choice', { timeout: 60000 });
-await p.locator('.ch-choice').nth(1).click();
-await p.waitForSelector('.ch-hang', { timeout: 60000 });
-await p.locator('.ch-hang').click();
+// 4. Lab with Hana, then the evening in Quarters.
+await enter('lab');
+await playScene('hana', 'Evening');
+console.log('evening');
+for (let i = 0; i < 400 && !(await p.locator('.ov-night button').count()); i++) {
+  if (await p.locator('.sb-choice').count()) {
+    await shot('dinner');
+    await p.locator('.sb-choice').first().click();
+  } else if (await p.locator('.sb:not([hidden])').count()) {
+    const sb = await p.locator('.sb').boundingBox();
+    await p.mouse.click(sb.x + sb.width / 2, sb.y + 10);
+  }
+  await p.waitForTimeout(500);
+}
 
 // Night.
 await p.waitForSelector('.ov-night button', { timeout: 120000 });
