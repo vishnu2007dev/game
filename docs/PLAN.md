@@ -34,7 +34,11 @@ Code on a laptop. `CLAUDE.md` has the code map and house rules;
 ## State of testing
 `npm run build`, `npm test` (52 tests) and `npm run e2e:day1` all pass:
 the browser test plays the story Day 1 end to end through to the night
-log. The story Day 1 is also on the old private preview link.
+log, now also confirmed on a Windows laptop with a real GPU (Node 24,
+Chrome). The story Day 1 is also on the old private preview link.
+
+Waiting on: the owner's feedback on Day 1. Do not start Day 2 until they
+say go.
 
 Known polish items for Day 1 (small, do them first or alongside Day 2):
 - In one person scenes the speaker turns side on to the camera; they

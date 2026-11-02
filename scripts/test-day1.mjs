@@ -88,7 +88,10 @@ const knob = toPage(box, 400, 112);
 const read = (k) => p.locator('.tk-canvas').getAttribute(`data-${k}`).then(Number);
 const frame = () => p.evaluate(() => new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok))));
 let shotTaken = false;
-for (let tries = 0; tries < 60 && (await p.locator('.tk-canvas').count()); tries++) {
+// A time limit, not a try count: on a real GPU each try is only a frame,
+// and the trimmed needle takes about 12 s to come round to the top.
+const syncEnd = Date.now() + 120000;
+while (Date.now() < syncEnd && (await p.locator('.tk-breaker:enabled').count())) {
   const slip = await read('slip');
   if (Math.abs(slip) >= 0.1) {
     // Drag down to slow the generator: 80 canvas px per hertz.
@@ -105,8 +108,8 @@ for (let tries = 0; tries < 60 && (await p.locator('.tk-canvas').count()); tries
     shotTaken = true;
   }
   const angle = await read('angle');
-  console.log('sync try', tries, 'slip', slip, 'angle', angle);
   if (Math.abs(angle) < 12) {
+    console.log('closing breaker: slip', slip, 'angle', angle);
     await p.locator('.tk-breaker').click();
     await p.waitForTimeout(1500);
   } else await frame();
